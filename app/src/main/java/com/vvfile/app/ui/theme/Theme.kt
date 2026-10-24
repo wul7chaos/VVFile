@@ -55,10 +55,20 @@ private val RectShapes = Shapes(
 @Composable
 fun VVFileTheme(
     darkTheme: Boolean = true,
+    pureBlack: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val scheme = when {
+        !darkTheme -> LightColors
+        pureBlack -> DarkColors.copy(
+            background = Color.Black,
+            surface = Color(0xFF070707),
+            surfaceVariant = Color(0xFF101010),
+        )
+        else -> DarkColors
+    }
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = scheme,
         typography = VVTypography,
         shapes = RectShapes,
         content = content,

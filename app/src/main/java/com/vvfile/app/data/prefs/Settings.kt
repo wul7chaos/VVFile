@@ -3,8 +3,8 @@ package com.vvfile.app.data.prefs
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 
-/** 主题模式：跟随系统 / 固定深色 / 固定浅色。 */
-enum class ThemeMode { SYSTEM, DARK, LIGHT }
+/** 主题模式：跟随系统 / 固定深色 / 固定浅色 / 纯黑。 */
+enum class ThemeMode { SYSTEM, DARK, LIGHT, BLACK }
 
 /**
  * 用户设置。字段默认值与浏览器现状一致（双窗格、不显示隐藏文件、名称升序）。

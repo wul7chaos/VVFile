@@ -15,12 +15,16 @@
     <string name="settings_theme_system">跟随系统</string>
     <string name="settings_theme_dark">深色</string>
     <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_black">纯黑</string>
 
     <!-- 浏览 -->
     <string name="settings_dual_pane">双窗格</string>
     <string name="settings_dual_pane_hint">左右两栏对比文件；关闭后为单窗格</string>
     <string name="settings_show_hidden">显示隐藏文件</string>
     <string name="settings_show_hidden_hint">展示以 . 开头的文件和文件夹</string>
+    <string name="settings_start_path">启动目录</string>
+    <string name="settings_start_path_hint">留空则打开内部存储；修改后立即生效</string>
+    <string name="settings_start_path_save">保存</string>
     <string name="settings_default_sort">默认排序</string>
     <string name="settings_default_sort_hint">新建窗格时使用的排序方式</string>
     <string name="settings_sort_name">名称</string>

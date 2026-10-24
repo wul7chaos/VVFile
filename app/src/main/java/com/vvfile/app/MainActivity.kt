@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
                 .collectAsStateWithLifecycle(initialValue = Settings.DEFAULT)
             val darkTheme = when (settings.theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                ThemeMode.DARK -> true
+                ThemeMode.DARK, ThemeMode.BLACK -> true
                 ThemeMode.LIGHT -> false
             }
             val view = LocalView.current
@@ -56,7 +56,10 @@ class MainActivity : ComponentActivity() {
                 controller.isAppearanceLightNavigationBars = !darkTheme
             }
 
-            VVFileTheme(darkTheme = darkTheme) {
+            VVFileTheme(
+                darkTheme = darkTheme,
+                pureBlack = settings.theme == ThemeMode.BLACK,
+            ) {
                 var editingPath by remember { mutableStateOf<String?>(null) }
                 var showSettings by remember { mutableStateOf(false) }
                 var showTerminal by remember { mutableStateOf(false) }
