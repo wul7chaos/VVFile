@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,23 +27,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,11 +63,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,7 +81,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -75,9 +92,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.vvfile.app.R
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 import com.vvfile.app.ui.components.PathBar
+import com.vvfile.app.ui.theme.VVDanger
 import com.vvfile.app.ui.theme.VVWarn
 import kotlinx.coroutines.launch
 
@@ -89,6 +108,12 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     var hasPermission by remember { mutableStateOf(hasStoragePermission(context)) }
     var showAbout by remember { mutableStateOf(false) }
+
+    // 每个窗格一份滚动状态；路径变化时回到顶部（requestScrollToItem 在列表尚未布局时也生效）
+    val leftListState = rememberLazyListState()
+    val rightListState = rememberLazyListState()
+    LaunchedEffect(state.left.path) { leftListState.requestScrollToItem(0) }
+    LaunchedEffect(state.right.path) { rightListState.requestScrollToItem(0) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -102,6 +127,15 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
     }
 
     val activePane = if (state.active == PaneId.LEFT) state.left else state.right
+    val selectionActive = activePane.selectionMode
+    val notImplemented: () -> Unit = {
+        Toast.makeText(context, R.string.ui_action_m2_placeholder, Toast.LENGTH_SHORT).show()
+    }
+
+    // 返回键优先退出选择态；抽屉展开时让抽屉先处理返回
+    BackHandler(enabled = selectionActive && !drawerState.isOpen) {
+        viewModel.clearSelection(state.active)
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -117,16 +151,26 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                 .background(MaterialTheme.colorScheme.background)
                 .statusBarsPadding(),
         ) {
-            BrowserTopBar(
-                active = state.active,
-                onActiveChange = viewModel::setActive,
-                onMenu = { scope.launch { drawerState.open() } },
-                showHidden = state.showHidden,
-                onRefresh = viewModel::refreshAll,
-                onToggleHidden = viewModel::toggleHidden,
-                onSwap = viewModel::swapPanes,
-                onAbout = { showAbout = true },
-            )
+            if (selectionActive) {
+                SelectionTopBar(
+                    count = activePane.selected.size,
+                    onClose = { viewModel.clearSelection(state.active) },
+                    onSelectAll = { viewModel.selectAll(state.active) },
+                )
+            } else {
+                BrowserTopBar(
+                    active = state.active,
+                    dualPane = state.dualPane,
+                    onActiveChange = viewModel::setActive,
+                    onMenu = { scope.launch { drawerState.open() } },
+                    showHidden = state.showHidden,
+                    onRefresh = viewModel::refreshAll,
+                    onToggleHidden = viewModel::toggleHidden,
+                    onToggleDualPane = { viewModel.setDualPane(!state.dualPane) },
+                    onSwap = viewModel::swapPanes,
+                    onAbout = { showAbout = true },
+                )
+            }
 
             if (!hasPermission) {
                 PermissionBanner(onGrant = { openAllFilesSettings(context) })
@@ -144,41 +188,58 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                 PaneContent(
                     pane = state.left,
                     active = state.active == PaneId.LEFT,
+                    listState = leftListState,
                     onActivate = { viewModel.setActive(PaneId.LEFT) },
                     onOpenDir = { viewModel.navigate(PaneId.LEFT, it) },
                     onOpenFile = { entry ->
                         Toast.makeText(context, "打开 ${entry.name}：M2 接入", Toast.LENGTH_SHORT).show()
                     },
+                    onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.LEFT, entry.path) },
                     onRetry = { viewModel.refresh(PaneId.LEFT) },
+                    onNewFolder = notImplemented,
                     modifier = Modifier.weight(1f),
                 )
-                Box(
-                    Modifier
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.outline),
-                )
-                PaneContent(
-                    pane = state.right,
-                    active = state.active == PaneId.RIGHT,
-                    onActivate = { viewModel.setActive(PaneId.RIGHT) },
-                    onOpenDir = { viewModel.navigate(PaneId.RIGHT, it) },
-                    onOpenFile = { entry ->
-                        Toast.makeText(context, "打开 ${entry.name}：M2 接入", Toast.LENGTH_SHORT).show()
-                    },
-                    onRetry = { viewModel.refresh(PaneId.RIGHT) },
-                    modifier = Modifier.weight(1f),
-                )
+                if (state.dualPane) {
+                    Box(
+                        Modifier
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outline),
+                    )
+                    PaneContent(
+                        pane = state.right,
+                        active = state.active == PaneId.RIGHT,
+                        listState = rightListState,
+                        onActivate = { viewModel.setActive(PaneId.RIGHT) },
+                        onOpenDir = { viewModel.navigate(PaneId.RIGHT, it) },
+                        onOpenFile = { entry ->
+                            Toast.makeText(context, "打开 ${entry.name}：M2 接入", Toast.LENGTH_SHORT).show()
+                        },
+                        onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.RIGHT, entry.path) },
+                        onRetry = { viewModel.refresh(PaneId.RIGHT) },
+                        onNewFolder = notImplemented,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
 
-            BrowserBottomBar(
-                pane = activePane,
-                onBack = { viewModel.goBack(state.active) },
-                onForward = { viewModel.goForward(state.active) },
-                onNew = { Toast.makeText(context, "新建：M2 接入", Toast.LENGTH_SHORT).show() },
-                onSwap = viewModel::swapPanes,
-                onUp = { viewModel.navigateUp(state.active) },
-            )
+            if (selectionActive) {
+                SelectionBottomBar(
+                    onCopy = notImplemented,
+                    onMove = notImplemented,
+                    onDelete = notImplemented,
+                    onMoreAction = notImplemented,
+                )
+            } else {
+                BrowserBottomBar(
+                    pane = activePane,
+                    onBack = { viewModel.goBack(state.active) },
+                    onForward = { viewModel.goForward(state.active) },
+                    onNew = { Toast.makeText(context, "新建：M2 接入", Toast.LENGTH_SHORT).show() },
+                    onSwap = viewModel::swapPanes,
+                    onUp = { viewModel.navigateUp(state.active) },
+                )
+            }
         }
     }
 
@@ -190,11 +251,13 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
 @Composable
 private fun BrowserTopBar(
     active: PaneId,
+    dualPane: Boolean,
     onActiveChange: (PaneId) -> Unit,
     onMenu: () -> Unit,
     showHidden: Boolean,
     onRefresh: () -> Unit,
     onToggleHidden: () -> Unit,
+    onToggleDualPane: () -> Unit,
     onSwap: () -> Unit,
     onAbout: () -> Unit,
 ) {
@@ -224,7 +287,9 @@ private fun BrowserTopBar(
                 .padding(3.dp),
         ) {
             PaneTab("左窗格", active == PaneId.LEFT) { onActiveChange(PaneId.LEFT) }
-            PaneTab("右窗格", active == PaneId.RIGHT) { onActiveChange(PaneId.RIGHT) }
+            PaneTab("右窗格", active == PaneId.RIGHT, enabled = dualPane) {
+                onActiveChange(PaneId.RIGHT)
+            }
         }
 
         Box {
@@ -258,6 +323,20 @@ private fun BrowserTopBar(
                     },
                 )
                 DropdownMenuItem(
+                    text = { Text(stringResource(R.string.ui_single_pane_mode)) },
+                    leadingIcon = { Icon(Icons.Outlined.ViewColumn, contentDescription = null) },
+                    trailingIcon = {
+                        Switch(
+                            checked = !dualPane,
+                            onCheckedChange = null,
+                        )
+                    },
+                    onClick = {
+                        overflowOpen = false
+                        onToggleDualPane()
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("交换窗格") },
                     leadingIcon = { Icon(Icons.Outlined.SwapHoriz, contentDescription = null) },
                     onClick = {
@@ -279,22 +358,80 @@ private fun BrowserTopBar(
 }
 
 @Composable
-private fun RowScope.PaneTab(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun RowScope.PaneTab(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
     Box(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
             .clip(RoundedCornerShape(8.dp))
             .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = when {
+                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                selected -> MaterialTheme.colorScheme.onPrimary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
         )
+    }
+}
+
+@Composable
+private fun SelectionTopBar(
+    count: Int,
+    onClose: () -> Unit,
+    onSelectAll: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onClose) {
+            Icon(
+                imageVector = Icons.Outlined.Close,
+                contentDescription = stringResource(R.string.ui_selection_close),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Text(
+            text = stringResource(R.string.ui_selection_title, count),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp),
+        )
+        TextButton(
+            onClick = onSelectAll,
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.SelectAll,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(stringResource(R.string.ui_selection_all))
+        }
     }
 }
 
@@ -405,6 +542,101 @@ private fun BrowserBottomBar(
     }
 }
 
+/** 选择态底部工具条：复制 / 移动 / 删除 / 更多。 */
+@Composable
+private fun SelectionBottomBar(
+    onCopy: () -> Unit,
+    onMove: () -> Unit,
+    onDelete: () -> Unit,
+    onMoreAction: () -> Unit,
+) {
+    var moreOpen by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .navigationBarsPadding()
+            .height(58.dp)
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        NavAction(
+            icon = Icons.Outlined.ContentCopy,
+            label = stringResource(R.string.ui_action_copy),
+            enabled = true,
+            modifier = Modifier.weight(1f),
+            onClick = onCopy,
+        )
+        NavAction(
+            icon = Icons.AutoMirrored.Outlined.DriveFileMove,
+            label = stringResource(R.string.ui_action_move),
+            enabled = true,
+            modifier = Modifier.weight(1f),
+            onClick = onMove,
+        )
+        NavAction(
+            icon = Icons.Outlined.DeleteOutline,
+            label = stringResource(R.string.ui_action_delete),
+            enabled = true,
+            modifier = Modifier.weight(1f),
+            tint = VVDanger,
+            onClick = onDelete,
+        )
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            NavAction(
+                icon = Icons.Outlined.MoreHoriz,
+                label = stringResource(R.string.ui_action_more),
+                enabled = true,
+                modifier = Modifier.fillMaxSize(),
+                onClick = { moreOpen = true },
+            )
+            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                SelectionMoreItem(
+                    icon = Icons.Outlined.Edit,
+                    label = stringResource(R.string.ui_action_rename),
+                    onAction = onMoreAction,
+                    onClose = { moreOpen = false },
+                )
+                SelectionMoreItem(
+                    icon = Icons.Outlined.FolderZip,
+                    label = stringResource(R.string.ui_action_compress),
+                    onAction = onMoreAction,
+                    onClose = { moreOpen = false },
+                )
+                SelectionMoreItem(
+                    icon = Icons.Outlined.Share,
+                    label = stringResource(R.string.ui_action_share),
+                    onAction = onMoreAction,
+                    onClose = { moreOpen = false },
+                )
+                SelectionMoreItem(
+                    icon = Icons.Outlined.Info,
+                    label = stringResource(R.string.ui_action_properties),
+                    onAction = onMoreAction,
+                    onClose = { moreOpen = false },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectionMoreItem(
+    icon: ImageVector,
+    label: String,
+    onAction: () -> Unit,
+    onClose: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = { Icon(imageVector = icon, contentDescription = null) },
+        onClick = {
+            onClose()
+            onAction()
+        },
+    )
+}
+
 @Composable
 private fun NavAction(
     icon: ImageVector,
@@ -412,9 +644,11 @@ private fun NavAction(
     enabled: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    tint: Color? = null,
 ) {
-    val tint = if (enabled) {
-        MaterialTheme.colorScheme.onSurface
+    val baseTint = tint ?: MaterialTheme.colorScheme.onSurface
+    val resolvedTint = if (enabled) {
+        baseTint
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
     }
@@ -430,14 +664,14 @@ private fun NavAction(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = tint,
+            tint = resolvedTint,
             modifier = Modifier.size(21.dp),
         )
         Spacer(Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-            color = tint,
+            color = resolvedTint,
         )
     }
 }

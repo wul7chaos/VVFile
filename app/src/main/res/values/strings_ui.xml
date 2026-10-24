@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 选择态 -->
+    <string name="ui_selection_title">已选 %1$d 项</string>
+    <string name="ui_selection_close">退出选择</string>
+    <string name="ui_selection_all">全选</string>
+    <string name="ui_action_copy">复制</string>
+    <string name="ui_action_move">移动</string>
+    <string name="ui_action_delete">删除</string>
+    <string name="ui_action_more">更多</string>
+    <string name="ui_action_rename">重命名</string>
+    <string name="ui_action_compress">压缩</string>
+    <string name="ui_action_share">分享</string>
+    <string name="ui_action_properties">属性</string>
+
+    <!-- 文件操作在 M2 接入，当前仅提示 -->
+    <string name="ui_action_m2_placeholder">M2 实现</string>
+
+    <!-- 布局与列表状态 -->
+    <string name="ui_single_pane_mode">单窗格模式</string>
+    <string name="ui_empty_title">此文件夹为空</string>
+    <string name="ui_empty_subtitle">没有文件或文件夹</string>
+    <string name="ui_empty_new_folder">新建文件夹</string>
+    <string name="ui_loading">正在加载…</string>
+    <string name="ui_error_title">无法打开此文件夹</string>
+    <string name="ui_retry">重试</string>
+</resources>

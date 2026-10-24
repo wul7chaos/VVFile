@@ -39,7 +39,17 @@ class BrowserViewModel : ViewModel() {
     }
 
     fun setActive(pane: PaneId) {
-        if (_state.value.active != pane) _state.update { it.copy(active = pane) }
+        // 单窗格模式下右窗格不可用，活动窗格始终为左窗格
+        val target = if (_state.value.dualPane) pane else PaneId.LEFT
+        if (_state.value.active == target) return
+        _state.update { current ->
+            // 离开带选择的窗格时结束其选择态，避免留下看不见的选中项
+            val cleared = when (current.active) {
+                PaneId.LEFT -> current.copy(left = current.left.copy(selected = emptySet()))
+                PaneId.RIGHT -> current.copy(right = current.right.copy(selected = emptySet()))
+            }
+            cleared.copy(active = target)
+        }
     }
 
     fun navigate(pane: PaneId, path: String) {
@@ -108,8 +118,53 @@ class BrowserViewModel : ViewModel() {
     }
 
     fun setDualPane(enabled: Boolean) {
-        _state.update { it.copy(dualPane = enabled, active = PaneId.LEFT) }
+        _state.update { s ->
+            s.copy(
+                dualPane = enabled,
+                active = PaneId.LEFT,
+                // 收起右窗格时丢弃其选择，避免重新展开后残留看不见的选中项
+                right = if (enabled) s.right else s.right.copy(selected = emptySet()),
+            )
+        }
     }
+
+    /** 长按/选择态点击：切换单条选中状态，并把该窗格设为活动窗格。 */
+    fun toggleSelect(pane: PaneId, path: String) {
+        _state.update { s ->
+            val target = if (s.dualPane) pane else PaneId.LEFT
+            val current = if (target == PaneId.LEFT) s.left else s.right
+            val selected = if (path in current.selected) current.selected - path else current.selected + path
+            s.withOnlySelection(target, selected)
+        }
+    }
+
+    fun clearSelection(pane: PaneId) {
+        updatePane(pane) { it.copy(selected = emptySet()) }
+    }
+
+    fun selectAll(pane: PaneId) {
+        _state.update { s ->
+            val target = if (s.dualPane) pane else PaneId.LEFT
+            val current = if (target == PaneId.LEFT) s.left else s.right
+            s.withOnlySelection(target, current.entries.map { it.path }.toSet())
+        }
+    }
+
+    /** 选择态始终只属于一个窗格：写入目标窗格时清空对侧选择。 */
+    private fun BrowserUiState.withOnlySelection(pane: PaneId, selected: Set<String>): BrowserUiState =
+        if (pane == PaneId.LEFT) {
+            copy(
+                left = left.copy(selected = selected),
+                right = right.copy(selected = emptySet()),
+                active = PaneId.LEFT,
+            )
+        } else {
+            copy(
+                right = right.copy(selected = selected),
+                left = left.copy(selected = emptySet()),
+                active = PaneId.RIGHT,
+            )
+        }
 
     /** 文件打开在 M2 接入；此处只暴露判断给 UI。 */
     fun isDirectory(path: String): Boolean = File(path).isDirectory
@@ -122,6 +177,7 @@ class BrowserViewModel : ViewModel() {
         keepEntries: Boolean = false,
     ) {
         loadJobs[pane]?.cancel()
+        val pathChanged = path != paneState(pane).path
         updatePane(pane) {
             it.copy(
                 path = path,
@@ -130,13 +186,24 @@ class BrowserViewModel : ViewModel() {
                 loading = true,
                 error = null,
                 entries = if (keepEntries) it.entries else emptyList(),
+                // 切换目录时退出选择态；刷新同一目录保留选择
+                selected = if (pathChanged) emptySet() else it.selected,
             )
         }
         loadJobs[pane] = viewModelScope.launch {
             try {
                 val entries = repository.list(path, _state.value.showHidden)
                     .sortedWith(_state.value.sort.comparator())
-                updatePane(pane) { it.copy(entries = entries, loading = false, error = null) }
+                updatePane(pane) { current ->
+                    // 列表刷新后剔除已不存在的条目，避免"已选 N 项"与列表不一致
+                    val present = entries.map { it.path }.toSet()
+                    current.copy(
+                        entries = entries,
+                        loading = false,
+                        error = null,
+                        selected = current.selected.intersect(present),
+                    )
+                }
                 runCatching { repository.storageStats(path) }
                     .onSuccess { stats -> _state.update { it.copy(storage = stats) } }
             } catch (cancel: CancellationException) {
