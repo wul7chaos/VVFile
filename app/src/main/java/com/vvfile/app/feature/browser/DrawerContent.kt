@@ -21,7 +21,6 @@ import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -110,7 +109,6 @@ fun DrawerContent(
             DrawerItem(Icons.Outlined.Apps, "已安装应用") { onToolClick("已安装应用") }
             DrawerItem(Icons.Outlined.EditNote, "文本编辑器") { onToolClick("文本编辑器") }
             DrawerItem(Icons.Outlined.Terminal, "终端模拟器") { onToolClick("终端模拟器") }
-            DrawerItem(Icons.Outlined.StarBorder, "书签") { onToolClick("书签") }
             DrawerItem(Icons.Outlined.Settings, "设置") { onToolClick("设置") }
 
             Spacer(Modifier.weight(1f))
@@ -186,5 +184,6 @@ private fun DrawerItem(
         )
     }
 }
+
 
 

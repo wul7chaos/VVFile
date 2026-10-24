@@ -23,15 +23,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -54,7 +51,6 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material.icons.outlined.Visibility
@@ -130,9 +126,6 @@ fun BrowserScreen(
     var hasPermission by remember { mutableStateOf(hasStoragePermission(context)) }
     var showAbout by remember { mutableStateOf(false) }
     var properties by remember { mutableStateOf<FileProperties?>(null) }
-    var showBookmarks by remember { mutableStateOf(false) }
-    val bookmarks by remember { PrefsRepository.get(context).bookmarks }
-        .collectAsStateWithLifecycle(initialValue = emptyList<String>())
 
     // 每个窗格一份滚动状态；路径变化时回到顶部（requestScrollToItem 在列表尚未布局时也生效）
     val leftListState = rememberLazyListState()
@@ -197,9 +190,7 @@ fun BrowserScreen(
         drawerContent = {
             DrawerContent(state) { tool ->
                 scope.launch { drawerState.close() }
-                if (tool == "书签") {
-                    showBookmarks = true
-                } else if (onToolClick != null) {
+                if (onToolClick != null) {
                     onToolClick(tool)
                 } else {
                     Toast.makeText(context, "$tool · 后续里程碑接入", Toast.LENGTH_SHORT).show()
@@ -359,24 +350,6 @@ fun BrowserScreen(
 
     properties?.let { info ->
         PropertiesDialog(properties = info, onDismiss = { properties = null })
-    }
-
-    if (showBookmarks) {
-        BookmarkDialog(
-            bookmarks = bookmarks,
-            currentPath = activePane.path,
-            onAdd = {
-                scope.launch { PrefsRepository.get(context).addBookmark(activePane.path) }
-            },
-            onRemove = { path ->
-                scope.launch { PrefsRepository.get(context).removeBookmark(path) }
-            },
-            onNavigate = { path ->
-                viewModel.navigate(state.active, path)
-                showBookmarks = false
-            },
-            onDismiss = { showBookmarks = false },
-        )
     }
 
     state.operation?.let { operation ->
@@ -964,99 +937,6 @@ private data class NameDialogState(
 )
 
 @Composable
-private fun BookmarkDialog(
-    bookmarks: List<String>,
-    currentPath: String,
-    onAdd: () -> Unit,
-    onRemove: (String) -> Unit,
-    onNavigate: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ui_bookmarks_title)) },
-        text = {
-            Column {
-                if (bookmarks.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.ui_bookmarks_empty),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 260.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        bookmarks.forEach { path ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onNavigate(path) }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Star,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = path,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                IconButton(
-                                    onClick = { onRemove(path) },
-                                    modifier = Modifier.size(32.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Close,
-                                        contentDescription = stringResource(R.string.ui_bookmarks_remove),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
-                            }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = onAdd, enabled = currentPath.isNotBlank()) {
-                    Icon(
-                        imageVector = Icons.Outlined.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.ui_bookmarks_add_current), fontSize = 12.sp)
-                }
-                Text(
-                    text = currentPath,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.ui_bookmarks_close))
-            }
-        },
-    )
-}
-
-@Composable
 private fun PropertiesDialog(properties: FileProperties, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1347,5 +1227,6 @@ private fun openAllFilesSettings(context: Context) {
         }
     }
 }
+
 
 
