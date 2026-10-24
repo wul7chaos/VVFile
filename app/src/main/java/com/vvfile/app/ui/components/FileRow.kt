@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.vvfile.app.core.format.SizeFormatter
 import com.vvfile.app.core.format.TimeFormatter
 import com.vvfile.app.data.model.FileEntry
@@ -69,8 +70,8 @@ fun FileRow(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(44.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent),
     ) {
         if (isSelected) {
@@ -88,24 +89,27 @@ fun FileRow(
                 .fillMaxSize()
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .semantics { this.selected = isSelected }
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selectionMode) {
                 SelectionIndicator(checked = isSelected)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(6.dp))
             }
             Icon(
                 imageVector = iconFor(entry),
                 contentDescription = if (entry.isDirectory) "文件夹" else "文件",
                 tint = tintFor(entry),
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(20.dp),
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = entry.name,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
+                    ),
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -113,7 +117,10 @@ fun FileRow(
                 )
                 Text(
                     text = metaFor(entry),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -137,7 +144,7 @@ private fun SelectionIndicator(checked: Boolean) {
     val accent = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier
-            .size(22.dp)
+            .size(18.dp)
             .clip(CircleShape)
             .background(if (checked) accent else Color.Transparent)
             .border(
@@ -152,7 +159,7 @@ private fun SelectionIndicator(checked: Boolean) {
                 imageVector = Icons.Outlined.Check,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(14.dp),
+                modifier = Modifier.size(12.dp),
             )
         }
     }

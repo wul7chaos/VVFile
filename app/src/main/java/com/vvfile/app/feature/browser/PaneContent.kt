@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,7 +46,7 @@ import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.ui.components.FileRow
 
 /**
- * 单个窗格：路径头 + 列表 + 加载/空/错误态。
+ * 单个窗格：列表 + 加载/空/错误态。
  *
  * 列表滚动位置由调用方持有（每窗格一份 LazyListState），路径变化时由调用方回到顶部。
  */
@@ -83,39 +82,6 @@ fun PaneContent(
                 .height(2.dp)
                 .background(if (active) accent else Color.Transparent),
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(34.dp)
-                .padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.FolderOpen,
-                contentDescription = null,
-                tint = if (active) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = pane.path.ifEmpty { "…" },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = if (pane.selectionMode) {
-                    "${pane.selected.size}/${pane.entries.size}"
-                } else {
-                    "${pane.entries.size}"
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = if (pane.selectionMode) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
@@ -124,7 +90,7 @@ fun PaneContent(
                 pane.entries.isEmpty() -> EmptyState(onNewFolder)
                 else -> LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.dp),
                 ) {
                     items(pane.entries, key = { it.path }) { entry ->
                         FileRow(
@@ -172,9 +138,9 @@ private fun LoadingState() {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(48.dp)
+                    .height(40.dp)
                     .padding(vertical = 2.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
             )
         }

@@ -281,7 +281,7 @@ private fun BrowserTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(52.dp)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -296,7 +296,7 @@ private fun BrowserTopBar(
         Row(
             modifier = Modifier
                 .weight(1f)
-                .height(34.dp)
+                .height(32.dp)
                 .padding(horizontal = 4.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -411,7 +411,7 @@ private fun SelectionTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(52.dp)
             .background(MaterialTheme.colorScheme.primaryContainer)
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -463,7 +463,7 @@ private fun BrowserBreadcrumbBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(40.dp)
             .padding(start = 12.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -471,6 +471,21 @@ private fun BrowserBreadcrumbBar(
             path = pane.path,
             onNavigate = onNavigate,
             modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = if (pane.selectionMode) {
+                "${pane.selected.size}/${pane.entries.size}"
+            } else {
+                "${pane.entries.size} 项"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = if (pane.selectionMode) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            maxLines = 1,
+            modifier = Modifier.padding(start = 6.dp),
         )
         Box {
             IconButton(onClick = { sortOpen = true }) {
@@ -546,7 +561,7 @@ private fun BrowserBottomBar(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
             .navigationBarsPadding()
-            .height(58.dp)
+            .height(54.dp)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -572,7 +587,7 @@ private fun SelectionBottomBar(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
             .navigationBarsPadding()
-            .height(58.dp)
+            .height(54.dp)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
