@@ -397,6 +397,24 @@ fun BrowserScreen(
         )
     }
 
+    if (state.rootPrompt) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissRootNavigation,
+            title = { Text(stringResource(R.string.ui_root_prompt_title)) },
+            text = { Text(stringResource(R.string.ui_root_prompt_message)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmRootNavigation) {
+                    Text(stringResource(R.string.ui_root_prompt_allow))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissRootNavigation) {
+                    Text(stringResource(R.string.ui_root_prompt_cancel))
+                }
+            },
+        )
+    }
+
     if (showFilter) {
         FilterDialog(
             initialQuery = activePane.filterQuery,

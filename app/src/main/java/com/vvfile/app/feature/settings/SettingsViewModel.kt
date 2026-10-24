@@ -56,6 +56,10 @@ class SettingsViewModel(
 
     fun setRestoreLastPath(enabled: Boolean) = write { repository.setRestoreLastPath(enabled) }
 
+    fun setRootPolicy(policy: com.vvfile.app.core.shell.RootPolicy) = write {
+        repository.setRootPolicy(policy)
+    }
+
     fun setSort(spec: SortSpec) = write { repository.setSort(spec) }
 
     fun setSortField(field: SortField) = write { repository.setSortField(field) }

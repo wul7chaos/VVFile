@@ -62,6 +62,7 @@ import com.vvfile.app.BuildConfig
 import com.vvfile.app.R
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
+import com.vvfile.app.core.shell.RootPolicy
 import com.vvfile.app.data.prefs.Settings
 import com.vvfile.app.data.prefs.ThemeMode
 import com.vvfile.app.ui.theme.AccentPresets
@@ -103,6 +104,7 @@ fun SettingsScreen(
         onSortAscendingChange = viewModel::setSortAscending,
         onDirectoriesFirstChange = viewModel::setDirectoriesFirst,
         onRestoreLastPathChange = viewModel::setRestoreLastPath,
+        onRootPolicyChange = viewModel::setRootPolicy,
         onStartPathChange = viewModel::setStartPath,
         modifier = modifier,
     )
@@ -124,6 +126,7 @@ internal fun SettingsContent(
     onSortAscendingChange: (Boolean) -> Unit,
     onDirectoriesFirstChange: (Boolean) -> Unit = {},
     onRestoreLastPathChange: (Boolean) -> Unit = {},
+    onRootPolicyChange: (RootPolicy) -> Unit = {},
     onStartPathChange: (String?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -216,6 +219,8 @@ internal fun SettingsContent(
                     checked = settings.sort.directoriesFirst,
                     onCheckedChange = onDirectoriesFirstChange,
                 )
+                RowDivider()
+                RootPolicySetting(policy = settings.rootPolicy, onChange = onRootPolicyChange)
             }
 
             SettingsSection(
@@ -449,6 +454,44 @@ private fun FontSizeSetting(title: String, value: Int, onChange: (Int) -> Unit) 
         TextButton(onClick = { onChange(value + 1) }, enabled = value < 24) { Text("+") }
     }
 }
+
+@Composable
+private fun RootPolicySetting(policy: RootPolicy, onChange: (RootPolicy) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Text(
+            text = stringResource(R.string.settings_root_policy),
+            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 14.sp, lineHeight = 19.sp),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.settings_root_policy_hint),
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, lineHeight = 15.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RootPolicy.entries.forEach { value ->
+                FilterChip(
+                    selected = value == policy,
+                    onClick = { onChange(value) },
+                    label = {
+                        Text(rootPolicyLabel(value), style = MaterialTheme.typography.labelMedium)
+                    },
+                    leadingIcon = checkIcon(selected = value == policy),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun rootPolicyLabel(policy: RootPolicy): String = stringResource(
+    when (policy) {
+        RootPolicy.AUTO -> R.string.settings_root_auto
+        RootPolicy.ASK -> R.string.settings_root_ask
+        RootPolicy.DISABLED -> R.string.settings_root_disabled
+    },
+)
 
 @Composable
 private fun StartPathSetting(current: String?, onSave: (String?) -> Unit) {

@@ -1,5 +1,6 @@
 package com.vvfile.app.data.prefs
 
+import com.vvfile.app.core.shell.RootPolicy
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 
@@ -27,6 +28,7 @@ data class Settings(
     val startPath: String? = null,
     /** 启动时回到上次浏览目录（startPath 优先）。 */
     val restoreLastPath: Boolean = true,
+    val rootPolicy: RootPolicy = RootPolicy.AUTO,
 ) {
     companion object {
         val DEFAULT: Settings = Settings()
@@ -35,6 +37,10 @@ data class Settings(
             ThemeMode.entries.firstOrNull { it.name == raw?.trim()?.uppercase() } ?: ThemeMode.SYSTEM
 
         fun themeKey(theme: ThemeMode): String = theme.name
+
+        fun rootPolicyFromKey(raw: String?): RootPolicy =
+            RootPolicy.entries.firstOrNull { it.name == raw?.trim()?.uppercase() }
+                ?: RootPolicy.AUTO
 
         fun sortFieldFromKey(raw: String?): SortField =
             SortField.entries.firstOrNull { it.name == raw?.trim()?.uppercase() } ?: SortField.NAME
@@ -58,6 +64,7 @@ data class Settings(
             editorFontSize: Int? = null,
             directoriesFirst: Boolean? = null,
             restoreLastPath: Boolean? = null,
+            rootPolicyKey: String? = null,
         ): Settings = Settings(
             theme = themeFromKey(themeKey),
             dualPane = dualPane ?: DEFAULT.dualPane,
@@ -73,6 +80,7 @@ data class Settings(
             ),
             startPath = normalizeStartPath(startPath),
             restoreLastPath = restoreLastPath ?: DEFAULT.restoreLastPath,
+            rootPolicy = rootPolicyFromKey(rootPolicyKey),
         )
 
         /** 空白路径等价于"使用默认启动目录"。 */

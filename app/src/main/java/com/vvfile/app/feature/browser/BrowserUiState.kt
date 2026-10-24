@@ -52,6 +52,8 @@ data class BrowserUiState(
     val dualPane: Boolean = true,
     val storage: StorageStats? = null,
     val rootAvailable: Boolean = false,
+    /** ASK 策略下等待用户确认访问系统分区。 */
+    val rootPrompt: Boolean = false,
     /** 正在进行的文件操作；非空时显示进度对话框。 */
     val operation: OperationUiState? = null,
     /** 复制/移动检测到同名目标时的处理提示。 */

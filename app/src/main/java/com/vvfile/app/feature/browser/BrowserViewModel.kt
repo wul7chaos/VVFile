@@ -12,7 +12,10 @@ import com.vvfile.app.core.result.OperationEvent
 import com.vvfile.app.core.result.OperationPhase
 import com.vvfile.app.core.result.OperationProgress
 import com.vvfile.app.core.result.OperationResult
+import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.core.shell.RootManager
+import com.vvfile.app.core.shell.RootPolicy
+import com.vvfile.app.data.file.RootPaths
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
@@ -40,6 +43,7 @@ class BrowserViewModel : ViewModel() {
     private var operationJob: Job? = null
     private var pendingTransfer: PendingTransfer? = null
     private var pendingUnzip: PendingUnzip? = null
+    private var pendingRootNavigation: Pair<PaneId, String>? = null
     private val defaultPath: String = runCatching {
         Environment.getExternalStorageDirectory().absolutePath
     }.getOrDefault("/storage/emulated/0")
@@ -81,8 +85,32 @@ class BrowserViewModel : ViewModel() {
     fun navigate(pane: PaneId, path: String) {
         val current = paneState(pane)
         if (path == current.path) return
+        if (RootPaths.isRootOnly(path)) {
+            when {
+                RootAccess.policy == RootPolicy.DISABLED ->
+                    return postMessage(UiMessage.Simple(R.string.ui_root_disabled))
+                RootAccess.needsConfirmation() -> {
+                    pendingRootNavigation = pane to path
+                    _state.update { it.copy(rootPrompt = true) }
+                    return
+                }
+            }
+        }
         val history = current.history.take(current.historyIndex + 1) + path
         load(pane, path, history, history.lastIndex)
+    }
+
+    fun confirmRootNavigation() {
+        RootAccess.confirm()
+        val pending = pendingRootNavigation ?: return
+        pendingRootNavigation = null
+        _state.update { it.copy(rootPrompt = false) }
+        navigate(pending.first, pending.second)
+    }
+
+    fun dismissRootNavigation() {
+        pendingRootNavigation = null
+        _state.update { it.copy(rootPrompt = false) }
     }
 
     fun navigateUp(pane: PaneId) {

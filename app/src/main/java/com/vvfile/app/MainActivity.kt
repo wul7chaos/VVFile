@@ -22,6 +22,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vvfile.app.core.format.MimeTypes
 import com.vvfile.app.core.share.FileOpener
+import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.data.prefs.PrefsRepository
 import com.vvfile.app.data.prefs.Settings
 import com.vvfile.app.data.prefs.ThemeMode
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
             }
             val view = LocalView.current
             SideEffect {
+                RootAccess.policy = settings.rootPolicy
                 val window = (context as? ComponentActivity)?.window ?: return@SideEffect
                 val controller = WindowCompat.getInsetsController(window, view)
                 controller.isAppearanceLightStatusBars = !darkTheme

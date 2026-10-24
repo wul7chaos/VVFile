@@ -18,6 +18,11 @@
     <string name="ui_chmod_mode">权限（如 755）</string>
     <string name="ui_chmod_apply">应用</string>
     <string name="ui_ops_chmod_success">权限已更新</string>
+    <string name="ui_root_disabled">root 访问已在设置中禁用</string>
+    <string name="ui_root_prompt_title">访问系统分区</string>
+    <string name="ui_root_prompt_message">该目录需要 root 权限读取。是否允许本次会话使用 su？</string>
+    <string name="ui_root_prompt_allow">允许</string>
+    <string name="ui_root_prompt_cancel">取消</string>
     <string name="ui_action_share">分享</string>
     <string name="ui_action_properties">属性</string>
     <string name="ui_filter_title">过滤</string>

@@ -5,6 +5,7 @@ import android.content.Context
 import com.vvfile.app.core.io.FallbackFileSystem
 import com.vvfile.app.core.io.NioFileSystem
 import com.vvfile.app.core.io.ShellFileSystem
+import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.core.shell.RootManager
 import com.vvfile.app.data.file.FallbackFileOperator
 import com.vvfile.app.data.file.FileOperator
@@ -39,7 +40,7 @@ object ServiceLocator {
                 FallbackFileSystem(
                     direct = NioFileSystem(),
                     root = ShellFileSystem(),
-                    rootAvailable = RootManager::isAvailable,
+                    rootAvailable = RootAccess::allowed,
                 ),
             )
         }
@@ -47,7 +48,7 @@ object ServiceLocator {
             fileOperator = FallbackFileOperator(
                 local = LocalFileOperator(),
                 root = ShellFileOperator(),
-                rootAvailable = RootManager::isAvailable,
+                rootAvailable = RootAccess::allowed,
             )
         }
     }

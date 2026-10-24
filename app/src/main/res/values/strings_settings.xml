@@ -34,6 +34,11 @@
     <string name="settings_restore_last_path_hint">启动时回到上次浏览的位置（启动目录优先）</string>
     <string name="settings_dirs_first">目录优先</string>
     <string name="settings_dirs_first_hint">关闭后文件夹与文件混合排序</string>
+    <string name="settings_root_policy">root 请求策略</string>
+    <string name="settings_root_policy_hint">仅控制 su 的使用；不接入 Shizuku/ADB</string>
+    <string name="settings_root_auto">自动</string>
+    <string name="settings_root_ask">每次询问</string>
+    <string name="settings_root_disabled">禁用</string>
     <string name="settings_default_sort">默认排序</string>
     <string name="settings_default_sort_hint">新建窗格时使用的排序方式</string>
     <string name="settings_sort_name">名称</string>

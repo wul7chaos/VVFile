@@ -76,6 +76,10 @@ class PrefsRepository private constructor(
         it.copy(restoreLastPath = enabled)
     }
 
+    suspend fun setRootPolicy(policy: com.vvfile.app.core.shell.RootPolicy) = update {
+        it.copy(rootPolicy = policy)
+    }
+
     /** 记住最后浏览目录；失败静默，不影响导航。 */
     suspend fun setLastPath(path: String) {
         runCatching {
@@ -124,6 +128,7 @@ private object PrefKeys {
     val EDITOR_FONT = intPreferencesKey("editor_font_size")
     val DIRECTORIES_FIRST = booleanPreferencesKey("directories_first")
     val RESTORE_LAST_PATH = booleanPreferencesKey("restore_last_path")
+    val ROOT_POLICY = stringPreferencesKey("root_policy")
     val LAST_PATH = stringPreferencesKey("last_path")
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_ASCENDING = booleanPreferencesKey("sort_ascending")
@@ -140,6 +145,7 @@ private fun Preferences.toSettings(): Settings = Settings.fromStorage(
     editorFontSize = this[PrefKeys.EDITOR_FONT],
     directoriesFirst = this[PrefKeys.DIRECTORIES_FIRST],
     restoreLastPath = this[PrefKeys.RESTORE_LAST_PATH],
+    rootPolicyKey = this[PrefKeys.ROOT_POLICY],
     sortFieldKey = this[PrefKeys.SORT_FIELD],
     sortAscending = this[PrefKeys.SORT_ASCENDING],
     startPath = this[PrefKeys.START_PATH],
@@ -155,6 +161,7 @@ private fun MutablePreferences.write(settings: Settings) {
     this[PrefKeys.EDITOR_FONT] = settings.editorFontSize
     this[PrefKeys.DIRECTORIES_FIRST] = settings.sort.directoriesFirst
     this[PrefKeys.RESTORE_LAST_PATH] = settings.restoreLastPath
+    this[PrefKeys.ROOT_POLICY] = settings.rootPolicy.name
     this[PrefKeys.SORT_FIELD] = Settings.sortFieldKey(settings.sort.field)
     this[PrefKeys.SORT_ASCENDING] = settings.sort.ascending
     val startPath = Settings.normalizeStartPath(settings.startPath)
