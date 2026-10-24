@@ -24,4 +24,16 @@
     <string name="editor_status_position">行 %1$d，列 %2$d</string>
     <string name="editor_status_chars">%1$d 字符</string>
     <string name="editor_status_lines">%1$d 行</string>
+
+    <!-- 查找/替换 -->
+    <string name="editor_search">查找</string>
+    <string name="editor_search_hint">查找内容</string>
+    <string name="editor_search_previous">上一个</string>
+    <string name="editor_search_next">下一个</string>
+    <string name="editor_search_close">关闭查找</string>
+    <string name="editor_replace_hint">替换为</string>
+    <string name="editor_replace">替换</string>
+    <string name="editor_replace_all">全部</string>
+    <string name="editor_goto_line">跳转行</string>
+    <string name="editor_goto">跳转</string>
 </resources>

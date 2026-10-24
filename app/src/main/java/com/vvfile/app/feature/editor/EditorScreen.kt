@@ -25,6 +25,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.AlertDialog
@@ -175,6 +178,26 @@ internal fun EditorContent(
     showLineNumbers: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
+    var searchVisible by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var replacement by rememberSaveable { mutableStateOf("") }
+    var gotoLine by rememberSaveable { mutableStateOf("") }
+    var matchIndex by remember { mutableStateOf(0) }
+    val matches = remember(fieldValue.text, query) { findMatches(fieldValue.text, query) }
+    LaunchedEffect(matches.size) {
+        if (matches.isNotEmpty() && matchIndex > matches.lastIndex) matchIndex = 0
+    }
+
+    fun selectMatch(index: Int) {
+        if (matches.isEmpty()) return
+        val safeIndex = ((index % matches.size) + matches.size) % matches.size
+        matchIndex = safeIndex
+        val start = matches[safeIndex]
+        onValueChange(
+            fieldValue.copy(selection = TextRange(start, start + query.length)),
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -182,8 +205,63 @@ internal fun EditorContent(
             .statusBarsPadding()
             .imePadding(),
     ) {
-        EditorTopBar(state = state, onBack = onBack, onSave = onSave)
+        EditorTopBar(
+            state = state,
+            onBack = onBack,
+            onSave = onSave,
+            onSearch = { searchVisible = !searchVisible },
+        )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+        if (searchVisible) {
+            EditorSearchBar(
+                query = query,
+                onQueryChange = {
+                    query = it
+                    matchIndex = 0
+                },
+                replacement = replacement,
+                onReplacementChange = { replacement = it },
+                matchCount = matches.size,
+                matchIndex = matchIndex,
+                readOnly = state.readOnly,
+                onPrevious = { selectMatch(matchIndex - 1) },
+                onNext = { selectMatch(matchIndex + 1) },
+                onReplace = {
+                    if (matches.isNotEmpty()) {
+                        val start = matches[matchIndex.coerceIn(0, matches.lastIndex)]
+                        val updated = fieldValue.text.replaceRange(
+                            start,
+                            start + query.length,
+                            replacement,
+                        )
+                        onValueChange(
+                            TextFieldValue(
+                                text = updated,
+                                selection = TextRange(start + replacement.length),
+                            ),
+                        )
+                    }
+                },
+                onReplaceAll = {
+                    if (query.isNotEmpty()) {
+                        val updated = Regex(
+                            Regex.escape(query),
+                            RegexOption.IGNORE_CASE,
+                        ).replace(fieldValue.text, Regex.escapeReplacement(replacement))
+                        onValueChange(TextFieldValue(updated, TextRange(0)))
+                    }
+                },
+                gotoLine = gotoLine,
+                onGotoLineChange = { gotoLine = it.filter(Char::isDigit).take(7) },
+                onGoto = {
+                    val line = gotoLine.toIntOrNull() ?: 1
+                    val offset = offsetOfLine(fieldValue.text, line)
+                    onValueChange(TextFieldValue(fieldValue.text, TextRange(offset)))
+                },
+                onClose = { searchVisible = false },
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+        }
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
                 state.loading -> LoadingState()
@@ -216,10 +294,166 @@ internal fun EditorContent(
 }
 
 @Composable
+private fun EditorSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    replacement: String,
+    onReplacementChange: (String) -> Unit,
+    matchCount: Int,
+    matchIndex: Int,
+    readOnly: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onReplace: () -> Unit,
+    onReplaceAll: () -> Unit,
+    gotoLine: String,
+    onGotoLineChange: (String) -> Unit,
+    onGoto: () -> Unit,
+    onClose: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CompactField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = stringResource(R.string.editor_search_hint),
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (matchCount == 0) "0/0" else "${matchIndex + 1}/$matchCount",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            IconButton(onClick = onPrevious, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Outlined.KeyboardArrowUp,
+                    contentDescription = stringResource(R.string.editor_search_previous),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            IconButton(onClick = onNext, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = stringResource(R.string.editor_search_next),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.editor_search_close),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CompactField(
+                value = replacement,
+                onValueChange = onReplacementChange,
+                placeholder = stringResource(R.string.editor_replace_hint),
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onReplace, enabled = !readOnly && matchCount > 0) {
+                Text(stringResource(R.string.editor_replace), fontSize = 12.sp)
+            }
+            TextButton(onClick = onReplaceAll, enabled = !readOnly && matchCount > 0) {
+                Text(stringResource(R.string.editor_replace_all), fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(2.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.editor_goto_line),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(6.dp))
+            CompactField(
+                value = gotoLine,
+                onValueChange = onGotoLineChange,
+                placeholder = "",
+                modifier = Modifier.width(64.dp),
+            )
+            TextButton(onClick = onGoto) {
+                Text(stringResource(R.string.editor_goto), fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = TextStyle(
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+        ),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        decorationBox = { inner ->
+            Box {
+                if (value.isEmpty() && placeholder.isNotEmpty()) {
+                    Text(
+                        text = placeholder,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                inner()
+            }
+        },
+    )
+}
+
+private fun findMatches(text: String, query: String): List<Int> {
+    if (query.isEmpty()) return emptyList()
+    val result = ArrayList<Int>()
+    var index = text.indexOf(query, ignoreCase = true)
+    while (index >= 0) {
+        result.add(index)
+        index = text.indexOf(
+            query,
+            index + query.length.coerceAtLeast(1),
+            ignoreCase = true,
+        )
+    }
+    return result
+}
+
+private fun offsetOfLine(text: String, line: Int): Int {
+    if (line <= 1) return 0
+    var current = 1
+    var index = 0
+    while (index < text.length && current < line) {
+        if (text[index] == '\n') current++
+        index++
+    }
+    return index.coerceAtMost(text.length)
+}
+
+@Composable
 private fun EditorTopBar(
     state: EditorUiState,
     onBack: () -> Unit,
     onSave: () -> Unit,
+    onSearch: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -275,6 +509,13 @@ private fun EditorTopBar(
             )
             Spacer(Modifier.width(14.dp))
         } else {
+            IconButton(onClick = onSearch) {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = stringResource(R.string.editor_search),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             IconButton(onClick = onSave, enabled = state.canSave) {
                 Icon(
                     imageVector = Icons.Outlined.Save,
