@@ -31,4 +31,40 @@ data class BrowserUiState(
     val dualPane: Boolean = true,
     val storage: StorageStats? = null,
     val rootAvailable: Boolean = false,
+    /** 正在进行的文件操作；非空时显示进度对话框。 */
+    val operation: OperationUiState? = null,
+    /** 复制/移动检测到同名目标时的处理提示。 */
+    val conflictPrompt: ConflictPrompt? = null,
+    /** 一次性提示（操作摘要/校验失败），UI 展示后调用 consumeMessage()。 */
+    val message: UiMessage? = null,
 )
+
+/** 会产生进度对话框的文件操作类型。 */
+enum class OperationKind { COPY, MOVE, DELETE, ZIP, UNZIP }
+
+data class OperationUiState(
+    val kind: OperationKind,
+    val progress: Float = 0f,
+    val currentName: String = "",
+    val processedItems: Int = 0,
+    val totalItems: Int = 0,
+    val preparing: Boolean = true,
+)
+
+data class ConflictPrompt(
+    val kind: OperationKind,
+    val count: Int,
+)
+
+/** 操作结束后交给 UI 的一次性反馈。Simple 用于校验/提示类文案。 */
+sealed interface UiMessage {
+    data class Result(
+        val succeeded: Int,
+        val failed: Int,
+        val skipped: Int,
+        val cancelled: Boolean,
+        val failureReason: String? = null,
+    ) : UiMessage
+
+    data class Simple(val textRes: Int) : UiMessage
+}

@@ -24,4 +24,62 @@
     <string name="ui_loading">正在加载…</string>
     <string name="ui_error_title">无法打开此文件夹</string>
     <string name="ui_retry">重试</string>
+
+    <!-- 文件操作：标题与对话框 -->
+    <string name="ui_ops_copy_title">正在复制</string>
+    <string name="ui_ops_move_title">正在移动</string>
+    <string name="ui_ops_delete_progress_title">正在删除</string>
+    <string name="ui_ops_zip_progress_title">正在压缩</string>
+    <string name="ui_ops_unzip_progress_title">正在解压</string>
+    <string name="ui_ops_delete_title">删除确认</string>
+    <string name="ui_ops_delete_message">确定删除已选的 %1$d 项吗？此操作不可撤销。</string>
+    <string name="ui_ops_confirm_delete">删除</string>
+    <string name="ui_ops_rename_title">重命名</string>
+    <string name="ui_ops_new_folder_title">新建文件夹</string>
+    <string name="ui_ops_new_file_title">新建文件</string>
+    <string name="ui_ops_zip_dialog_title">压缩为 ZIP</string>
+    <string name="ui_ops_name_label">名称</string>
+    <string name="ui_ops_cancel">取消</string>
+    <string name="ui_ops_ok">确定</string>
+    <string name="ui_action_unzip">解压</string>
+
+    <!-- 文件操作：进度与结果 -->
+    <string name="ui_ops_preparing">准备中…</string>
+    <string name="ui_ops_progress_percent">%1$d%%</string>
+    <string name="ui_ops_progress_items">%1$d / %2$d 项</string>
+    <string name="ui_ops_result_done">操作完成</string>
+    <string name="ui_ops_result_done_count">完成：成功 %1$d 项</string>
+    <string name="ui_ops_result_skipped">完成：成功 %1$d 项，跳过 %2$d 项</string>
+    <string name="ui_ops_result_partial">部分失败：成功 %1$d 项，失败 %2$d 项</string>
+    <string name="ui_ops_result_failed">操作失败：%1$s</string>
+    <string name="ui_ops_result_cancelled">已取消操作</string>
+    <string name="ui_ops_unknown_error">未知错误</string>
+
+    <!-- 文件操作：提示与校验 -->
+    <string name="ui_ops_single_pane_unavailable">单窗格模式下不可用，请先开启双窗格</string>
+    <string name="ui_ops_busy">已有操作正在进行</string>
+    <string name="ui_ops_nothing_selected">请先选择文件</string>
+    <string name="ui_ops_same_dir">源目录与目标目录相同</string>
+    <string name="ui_ops_into_self">不能复制或移动到自身或其子目录</string>
+    <string name="ui_ops_target_invalid">当前文件夹路径不可用</string>
+    <string name="ui_ops_unzip_requires_zip">请选择单个 .zip 文件</string>
+    <string name="ui_ops_name_invalid">文件名不合法</string>
+    <string name="ui_ops_zip_exists">同名压缩包已存在</string>
+    <string name="ui_ops_rename_requires_single">仅支持重命名单个条目</string>
+    <string name="ui_ops_rename_done">已重命名</string>
+    <string name="ui_ops_folder_created">已创建文件夹</string>
+    <string name="ui_ops_file_created">已创建文件</string>
+    <string name="ui_ops_conflict_check_failed">检查同名文件失败</string>
+
+    <!-- 文件操作：冲突处理 -->
+    <string name="ui_ops_conflict_title">存在同名项目</string>
+    <string name="ui_ops_conflict_message">目标目录已有 %1$d 个同名项目，请选择处理方式。</string>
+    <string name="ui_ops_conflict_replace">覆盖</string>
+    <string name="ui_ops_conflict_skip">跳过</string>
+    <string name="ui_ops_conflict_rename">重命名</string>
+
+    <!-- 文件操作：默认名称 -->
+    <string name="ui_ops_default_folder">新建文件夹</string>
+    <string name="ui_ops_default_file">新建文件.txt</string>
+    <string name="ui_ops_zip_default_multi">压缩包.zip</string>
 </resources>
