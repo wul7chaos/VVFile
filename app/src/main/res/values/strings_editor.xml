@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 顶栏 -->
+    <string name="editor_back">返回</string>
+    <string name="editor_save">保存</string>
+    <string name="editor_saved">已保存</string>
+    <string name="editor_readonly_badge">只读</string>
+    <string name="editor_readonly_hint">超过 5 MB，仅只读预览（前 2 MB）</string>
+
+    <!-- 加载/错误 -->
+    <string name="editor_loading">正在打开文件…</string>
+    <string name="editor_error_title">无法打开文件</string>
+    <string name="editor_dismiss_error">关闭提示</string>
+    <string name="editor_retry">重试</string>
+
+    <!-- 未保存确认 -->
+    <string name="editor_unsaved_title">未保存的更改</string>
+    <string name="editor_unsaved_message">当前文件有未保存的修改，返回后这些修改会丢失。</string>
+    <string name="editor_discard">放弃修改</string>
+    <string name="editor_keep_editing">继续编辑</string>
+
+    <!-- 底部状态栏 -->
+    <string name="editor_status_encoding">编码：%1$s</string>
+    <string name="editor_status_position">行 %1$d，列 %2$d</string>
+    <string name="editor_status_chars">%1$d 字符</string>
+    <string name="editor_status_lines">%1$d 行</string>
+</resources>
