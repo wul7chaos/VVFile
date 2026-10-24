@@ -1,0 +1,26 @@
+# ---- Android / Gradle ----
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+app/release/
+app/debug/
+
+# ---- 签名与密钥 ----
+*.jks
+*.keystore
+keystore.properties
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 日志与临时 ----
+*.log
+*.hprof
+docs/shots/*.tmp
