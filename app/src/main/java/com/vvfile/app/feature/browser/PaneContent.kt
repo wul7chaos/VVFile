@@ -181,7 +181,10 @@ private fun EmptyState(onNewFolder: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(14.dp))
-        FilledTonalButton(onClick = onNewFolder) {
+        FilledTonalButton(
+            onClick = onNewFolder,
+            shape = RectangleShape,
+        ) {
             Icon(
                 imageVector = Icons.Outlined.Add,
                 contentDescription = null,

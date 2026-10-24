@@ -40,6 +40,32 @@ class PrefsRepository private constructor(
         .map { it.toSettings() }
         .distinctUntilChanged()
 
+    /** 书签路径列表（换行分隔持久化，去重保序）。 */
+    val bookmarks: Flow<List<String>> = dataStore.data
+        .catch { failure ->
+            if (failure is IOException) emit(emptyPreferences()) else throw failure
+        }
+        .map { it.readBookmarks() }
+        .distinctUntilChanged()
+
+    suspend fun addBookmark(path: String) {
+        val clean = path.trim()
+        if (clean.isEmpty()) return
+        dataStore.edit { preferences ->
+            val current = preferences.readBookmarks()
+            if (clean !in current) {
+                preferences[PrefKeys.BOOKMARKS] = (current + clean).joinToString("\n")
+            }
+        }
+    }
+
+    suspend fun removeBookmark(path: String) {
+        dataStore.edit { preferences ->
+            val next = preferences.readBookmarks().filterNot { it == path }
+            preferences[PrefKeys.BOOKMARKS] = next.joinToString("\n")
+        }
+    }
+
     /** 读当前值、应用 [transform]、原子写回。 */
     suspend fun update(transform: (Settings) -> Settings) {
         dataStore.edit { preferences ->
@@ -88,7 +114,16 @@ private object PrefKeys {
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_ASCENDING = booleanPreferencesKey("sort_ascending")
     val START_PATH = stringPreferencesKey("start_path")
+    val BOOKMARKS = stringPreferencesKey("bookmarks")
 }
+
+private fun Preferences.readBookmarks(): List<String> =
+    this[PrefKeys.BOOKMARKS]
+        ?.lineSequence()
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?.toList()
+        .orEmpty()
 
 private fun Preferences.toSettings(): Settings = Settings.fromStorage(
     themeKey = this[PrefKeys.THEME],

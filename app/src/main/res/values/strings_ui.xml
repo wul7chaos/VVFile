@@ -12,6 +12,11 @@
     <string name="ui_action_compress">压缩</string>
     <string name="ui_action_share">分享</string>
     <string name="ui_action_properties">属性</string>
+    <string name="ui_bookmarks_title">书签</string>
+    <string name="ui_bookmarks_empty">暂无书签，可把当前目录加进来</string>
+    <string name="ui_bookmarks_add_current">添加当前目录</string>
+    <string name="ui_bookmarks_close">关闭</string>
+    <string name="ui_bookmarks_remove">删除书签</string>
 
     <!-- 文件操作在 M2 接入，当前仅提示 -->
     <string name="ui_action_m2_placeholder">M2 实现</string>
