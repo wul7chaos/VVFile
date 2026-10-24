@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowUpward
@@ -221,6 +222,7 @@ fun BrowserScreen(
                     count = activePane.selected.size,
                     onClose = { viewModel.clearSelection(state.active) },
                     onSelectAll = { viewModel.selectAll(state.active) },
+                    onInvertSelection = { viewModel.invertSelection(state.active) },
                 )
             } else {
                 BrowserTopBar(
@@ -610,6 +612,7 @@ private fun SelectionTopBar(
     count: Int,
     onClose: () -> Unit,
     onSelectAll: () -> Unit,
+    onInvertSelection: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -650,6 +653,20 @@ private fun SelectionTopBar(
             )
             Spacer(Modifier.width(4.dp))
             Text(stringResource(R.string.ui_selection_all))
+        }
+        TextButton(
+            onClick = onInvertSelection,
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.SwapVert,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(stringResource(R.string.ui_selection_invert))
         }
     }
 }

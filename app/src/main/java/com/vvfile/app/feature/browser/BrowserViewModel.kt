@@ -97,6 +97,9 @@ class BrowserViewModel : ViewModel() {
             }
         }
         val history = current.history.take(current.historyIndex + 1) + path
+        if (path.isNotBlank()) {
+            viewModelScope.launch { ServiceLocator.prefs.setLastPath(path) }
+        }
         load(pane, path, history, history.lastIndex)
     }
 
@@ -236,6 +239,15 @@ class BrowserViewModel : ViewModel() {
             val target = if (s.dualPane) pane else PaneId.LEFT
             val current = if (target == PaneId.LEFT) s.left else s.right
             s.withOnlySelection(target, current.entries.map { it.path }.toSet())
+        }
+    }
+
+    fun invertSelection(pane: PaneId) {
+        _state.update { s ->
+            val target = if (s.dualPane) pane else PaneId.LEFT
+            val current = if (target == PaneId.LEFT) s.left else s.right
+            val visible = current.visibleEntries.map { it.path }.toSet()
+            s.withOnlySelection(target, visible - current.selected)
         }
     }
 
@@ -607,9 +619,6 @@ class BrowserViewModel : ViewModel() {
         keepEntries: Boolean = false,
     ) {
         loadJobs[pane]?.cancel()
-        if (path.isNotBlank()) {
-            viewModelScope.launch { ServiceLocator.prefs.setLastPath(path) }
-        }
         val pathChanged = path != paneState(pane).path
         updatePane(pane) {
             it.copy(
@@ -640,6 +649,10 @@ class BrowserViewModel : ViewModel() {
                 runCatching { repository.storageStats(path) }
                     .onSuccess { stats -> _state.update { it.copy(storage = stats) } }
             } catch (cancel: CancellationException) {
+                // 被更新的加载取消时清掉 loading，避免界面永久停在骨架屏
+                updatePane(pane) { current ->
+                    if (current.path == path) current.copy(loading = false) else current
+                }
                 throw cancel
             } catch (error: Exception) {
                 updatePane(pane) { it.copy(loading = false, error = error.toUserMessage()) }
