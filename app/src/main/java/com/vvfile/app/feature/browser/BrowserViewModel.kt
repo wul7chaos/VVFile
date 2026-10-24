@@ -1,6 +1,7 @@
 package com.vvfile.app.feature.browser
 
 import android.os.Environment
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vvfile.app.R
@@ -277,7 +278,12 @@ class BrowserViewModel : ViewModel() {
                     }
                 }
             } catch (error: Exception) {
-                postMessage(UiMessage.Simple(R.string.ui_ops_unzip_probe_failed))
+                if (isZipSlip(error)) {
+                    postMessage(UiMessage.Simple(R.string.ui_ops_zip_slip_rejected))
+                } else {
+                    Log.e("VVFileUnzip", "probe failed", error)
+                    postMessage(UiMessage.Simple(R.string.ui_ops_unzip_probe_failed))
+                }
             }
         }
     }
@@ -387,7 +393,7 @@ class BrowserViewModel : ViewModel() {
                 throw cancel
             } catch (error: Exception) {
                 _state.update { it.copy(operation = null) }
-                postMessage(UiMessage.Result(0, 1, 0, false, error.message))
+                postMessage(UiMessage.Result(0, 1, 0, false, errorMessage(error)))
                 afterOperation()
             }
         }
@@ -495,6 +501,13 @@ class BrowserViewModel : ViewModel() {
         )
     }
 
+    private fun isZipSlip(error: Exception): Boolean =
+        error is java.util.zip.ZipException &&
+            error.message?.contains("Invalid zip entry path", ignoreCase = true) == true
+
+    private fun errorMessage(error: Exception): String =
+        if (isZipSlip(error)) "压缩包包含非法路径，已拒绝解压" else error.message ?: "操作失败"
+
     private data class PendingTransfer(
         val kind: OperationKind,
         val sources: List<String>,
@@ -570,3 +583,4 @@ class BrowserViewModel : ViewModel() {
         else -> message ?: "读取失败"
     }
 }
+

@@ -64,6 +64,7 @@
     <string name="ui_ops_target_invalid">当前文件夹路径不可用</string>
     <string name="ui_ops_unzip_requires_zip">请选择单个 .zip 文件</string>
     <string name="ui_ops_unzip_probe_failed">无法读取压缩包</string>
+    <string name="ui_ops_zip_slip_rejected">压缩包包含非法路径，已拒绝解压</string>
     <string name="ui_ops_name_invalid">文件名不合法</string>
     <string name="ui_ops_zip_exists">同名压缩包已存在</string>
     <string name="ui_ops_rename_requires_single">仅支持重命名单个条目</string>
