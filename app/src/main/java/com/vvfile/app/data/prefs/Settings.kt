@@ -25,6 +25,8 @@ data class Settings(
     val editorFontSize: Int = 13,
     val sort: SortSpec = SortSpec(),
     val startPath: String? = null,
+    /** 启动时回到上次浏览目录（startPath 优先）。 */
+    val restoreLastPath: Boolean = true,
 ) {
     companion object {
         val DEFAULT: Settings = Settings()
@@ -54,6 +56,8 @@ data class Settings(
             accentIndex: Int? = null,
             terminalFontSize: Int? = null,
             editorFontSize: Int? = null,
+            directoriesFirst: Boolean? = null,
+            restoreLastPath: Boolean? = null,
         ): Settings = Settings(
             theme = themeFromKey(themeKey),
             dualPane = dualPane ?: DEFAULT.dualPane,
@@ -65,8 +69,10 @@ data class Settings(
             sort = SortSpec(
                 field = sortFieldFromKey(sortFieldKey),
                 ascending = sortAscending ?: DEFAULT.sort.ascending,
+                directoriesFirst = directoriesFirst ?: DEFAULT.sort.directoriesFirst,
             ),
             startPath = normalizeStartPath(startPath),
+            restoreLastPath = restoreLastPath ?: DEFAULT.restoreLastPath,
         )
 
         /** 空白路径等价于"使用默认启动目录"。 */

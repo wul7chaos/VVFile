@@ -52,6 +52,10 @@ class SettingsViewModel(
 
     fun setEditorFontSize(size: Int) = write { repository.setEditorFontSize(size) }
 
+    fun setDirectoriesFirst(enabled: Boolean) = write { repository.setDirectoriesFirst(enabled) }
+
+    fun setRestoreLastPath(enabled: Boolean) = write { repository.setRestoreLastPath(enabled) }
+
     fun setSort(spec: SortSpec) = write { repository.setSort(spec) }
 
     fun setSortField(field: SortField) = write { repository.setSortField(field) }

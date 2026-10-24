@@ -1,6 +1,7 @@
 package com.vvfile.app
 
 import android.app.Application
+import android.content.Context
 import com.vvfile.app.core.io.FallbackFileSystem
 import com.vvfile.app.core.io.NioFileSystem
 import com.vvfile.app.core.io.ShellFileSystem
@@ -10,11 +11,12 @@ import com.vvfile.app.data.file.FileOperator
 import com.vvfile.app.data.file.FileRepository
 import com.vvfile.app.data.file.LocalFileOperator
 import com.vvfile.app.data.file.ShellFileOperator
+import com.vvfile.app.data.prefs.PrefsRepository
 
 class VVFileApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        ServiceLocator.init()
+        ServiceLocator.init(this)
     }
 }
 
@@ -24,8 +26,13 @@ object ServiceLocator {
         private set
     lateinit var fileOperator: FileOperator
         private set
+    lateinit var prefs: PrefsRepository
+        private set
 
-    fun init() {
+    fun init(context: Context) {
+        if (!::prefs.isInitialized) {
+            prefs = PrefsRepository.get(context.applicationContext)
+        }
         if (!::fileRepository.isInitialized) {
             // 普通目录走 NIO；无权限且 root 可用时自动回退到 su 只读通道
             fileRepository = FileRepository(

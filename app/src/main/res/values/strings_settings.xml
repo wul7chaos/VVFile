@@ -30,6 +30,10 @@
     <string name="settings_start_path">启动目录</string>
     <string name="settings_start_path_hint">留空则打开内部存储；修改后立即生效</string>
     <string name="settings_start_path_save">保存</string>
+    <string name="settings_restore_last_path">恢复上次目录</string>
+    <string name="settings_restore_last_path_hint">启动时回到上次浏览的位置（启动目录优先）</string>
+    <string name="settings_dirs_first">目录优先</string>
+    <string name="settings_dirs_first_hint">关闭后文件夹与文件混合排序</string>
     <string name="settings_default_sort">默认排序</string>
     <string name="settings_default_sort_hint">新建窗格时使用的排序方式</string>
     <string name="settings_sort_name">名称</string>

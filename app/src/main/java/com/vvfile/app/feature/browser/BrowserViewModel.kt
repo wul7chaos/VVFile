@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
@@ -45,10 +46,20 @@ class BrowserViewModel : ViewModel() {
 
     init {
         _state.update { it.copy(rootAvailable = RootManager.isAvailable()) }
-        navigate(PaneId.LEFT, defaultPath)
-        navigate(PaneId.RIGHT, defaultPath)
         viewModelScope.launch {
-            runCatching { repository.storageStats(defaultPath) }
+            val prefs = ServiceLocator.prefs
+            val settings = runCatching { prefs.settings.first() }.getOrNull()
+            val remembered = if (settings?.restoreLastPath != false) {
+                runCatching { prefs.lastPath() }.getOrNull()?.takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+            val initial = settings?.startPath?.takeIf { it.isNotBlank() }
+                ?: remembered
+                ?: defaultPath
+            navigate(PaneId.LEFT, initial)
+            navigate(PaneId.RIGHT, initial)
+            runCatching { repository.storageStats(initial) }
                 .onSuccess { stats -> _state.update { it.copy(storage = stats) } }
         }
     }
@@ -568,6 +579,9 @@ class BrowserViewModel : ViewModel() {
         keepEntries: Boolean = false,
     ) {
         loadJobs[pane]?.cancel()
+        if (path.isNotBlank()) {
+            viewModelScope.launch { ServiceLocator.prefs.setLastPath(path) }
+        }
         val pathChanged = path != paneState(pane).path
         updatePane(pane) {
             it.copy(

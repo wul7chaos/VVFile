@@ -15,6 +15,7 @@ import com.vvfile.app.data.model.SortSpec
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
@@ -67,6 +68,25 @@ class PrefsRepository private constructor(
         it.copy(editorFontSize = size.coerceIn(10, 24))
     }
 
+    suspend fun setDirectoriesFirst(enabled: Boolean) = update { current ->
+        current.copy(sort = current.sort.copy(directoriesFirst = enabled))
+    }
+
+    suspend fun setRestoreLastPath(enabled: Boolean) = update {
+        it.copy(restoreLastPath = enabled)
+    }
+
+    /** 记住最后浏览目录；失败静默，不影响导航。 */
+    suspend fun setLastPath(path: String) {
+        runCatching {
+            dataStore.edit { it[PrefKeys.LAST_PATH] = path }
+        }
+    }
+
+    suspend fun lastPath(): String? = runCatching {
+        dataStore.data.first()[PrefKeys.LAST_PATH]
+    }.getOrNull()
+
     suspend fun setSort(spec: SortSpec) = update { it.copy(sort = spec) }
 
     suspend fun setSortField(field: SortField) = update { current ->
@@ -102,6 +122,9 @@ private object PrefKeys {
     val ACCENT_INDEX = intPreferencesKey("accent_index")
     val TERMINAL_FONT = intPreferencesKey("terminal_font_size")
     val EDITOR_FONT = intPreferencesKey("editor_font_size")
+    val DIRECTORIES_FIRST = booleanPreferencesKey("directories_first")
+    val RESTORE_LAST_PATH = booleanPreferencesKey("restore_last_path")
+    val LAST_PATH = stringPreferencesKey("last_path")
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_ASCENDING = booleanPreferencesKey("sort_ascending")
     val START_PATH = stringPreferencesKey("start_path")
@@ -115,6 +138,8 @@ private fun Preferences.toSettings(): Settings = Settings.fromStorage(
     accentIndex = this[PrefKeys.ACCENT_INDEX],
     terminalFontSize = this[PrefKeys.TERMINAL_FONT],
     editorFontSize = this[PrefKeys.EDITOR_FONT],
+    directoriesFirst = this[PrefKeys.DIRECTORIES_FIRST],
+    restoreLastPath = this[PrefKeys.RESTORE_LAST_PATH],
     sortFieldKey = this[PrefKeys.SORT_FIELD],
     sortAscending = this[PrefKeys.SORT_ASCENDING],
     startPath = this[PrefKeys.START_PATH],
@@ -128,6 +153,8 @@ private fun MutablePreferences.write(settings: Settings) {
     this[PrefKeys.ACCENT_INDEX] = settings.accentIndex
     this[PrefKeys.TERMINAL_FONT] = settings.terminalFontSize
     this[PrefKeys.EDITOR_FONT] = settings.editorFontSize
+    this[PrefKeys.DIRECTORIES_FIRST] = settings.sort.directoriesFirst
+    this[PrefKeys.RESTORE_LAST_PATH] = settings.restoreLastPath
     this[PrefKeys.SORT_FIELD] = Settings.sortFieldKey(settings.sort.field)
     this[PrefKeys.SORT_ASCENDING] = settings.sort.ascending
     val startPath = Settings.normalizeStartPath(settings.startPath)

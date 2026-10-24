@@ -101,6 +101,8 @@ fun SettingsScreen(
         onDetailedListChange = viewModel::setDetailedList,
         onSortFieldChange = viewModel::setSortField,
         onSortAscendingChange = viewModel::setSortAscending,
+        onDirectoriesFirstChange = viewModel::setDirectoriesFirst,
+        onRestoreLastPathChange = viewModel::setRestoreLastPath,
         onStartPathChange = viewModel::setStartPath,
         modifier = modifier,
     )
@@ -120,6 +122,8 @@ internal fun SettingsContent(
     onDetailedListChange: (Boolean) -> Unit = {},
     onSortFieldChange: (SortField) -> Unit,
     onSortAscendingChange: (Boolean) -> Unit,
+    onDirectoriesFirstChange: (Boolean) -> Unit = {},
+    onRestoreLastPathChange: (Boolean) -> Unit = {},
     onStartPathChange: (String?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -190,6 +194,13 @@ internal fun SettingsContent(
                 RowDivider()
                 StartPathSetting(current = settings.startPath, onSave = onStartPathChange)
                 RowDivider()
+                SettingSwitchRow(
+                    title = stringResource(R.string.settings_restore_last_path),
+                    subtitle = stringResource(R.string.settings_restore_last_path_hint),
+                    checked = settings.restoreLastPath,
+                    onCheckedChange = onRestoreLastPathChange,
+                )
+                RowDivider()
                 SortFieldSetting(field = settings.sort.field, onSortFieldChange = onSortFieldChange)
                 RowDivider()
                 SettingSwitchRow(
@@ -197,6 +208,13 @@ internal fun SettingsContent(
                     subtitle = stringResource(R.string.settings_sort_ascending_hint),
                     checked = settings.sort.ascending,
                     onCheckedChange = onSortAscendingChange,
+                )
+                RowDivider()
+                SettingSwitchRow(
+                    title = stringResource(R.string.settings_dirs_first),
+                    subtitle = stringResource(R.string.settings_dirs_first_hint),
+                    checked = settings.sort.directoriesFirst,
+                    onCheckedChange = onDirectoriesFirstChange,
                 )
             }
 
