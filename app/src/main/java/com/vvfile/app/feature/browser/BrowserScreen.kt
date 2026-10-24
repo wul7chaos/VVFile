@@ -253,6 +253,7 @@ fun BrowserScreen(
                     pane = state.left,
                     active = state.active == PaneId.LEFT,
                     listState = leftListState,
+                    showDetails = settings.detailedList,
                     onActivate = { viewModel.setActive(PaneId.LEFT) },
                     onOpenDir = { path ->
                         viewModel.setActive(PaneId.LEFT)
@@ -285,6 +286,7 @@ fun BrowserScreen(
                         pane = state.right,
                         active = state.active == PaneId.RIGHT,
                         listState = rightListState,
+                        showDetails = settings.detailedList,
                         onActivate = { viewModel.setActive(PaneId.RIGHT) },
                         onOpenDir = { path ->
                             viewModel.setActive(PaneId.RIGHT)

@@ -22,6 +22,8 @@
     <string name="settings_dual_pane_hint">左右两栏对比文件；关闭后为单窗格</string>
     <string name="settings_show_hidden">显示隐藏文件</string>
     <string name="settings_show_hidden_hint">展示以 . 开头的文件和文件夹</string>
+    <string name="settings_detailed_list">详细列表</string>
+    <string name="settings_detailed_list_hint">列表第二行显示权限与所有者</string>
     <string name="settings_start_path">启动目录</string>
     <string name="settings_start_path_hint">留空则打开内部存储；修改后立即生效</string>
     <string name="settings_start_path_save">保存</string>

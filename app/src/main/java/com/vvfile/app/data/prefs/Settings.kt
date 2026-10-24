@@ -16,6 +16,8 @@ data class Settings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val dualPane: Boolean = true,
     val showHidden: Boolean = false,
+    /** 列表第二行显示权限/所有者，而不是大小/时间。 */
+    val detailedList: Boolean = false,
     val sort: SortSpec = SortSpec(),
     val startPath: String? = null,
 ) {
@@ -43,10 +45,12 @@ data class Settings(
             sortFieldKey: String?,
             sortAscending: Boolean?,
             startPath: String?,
+            detailedList: Boolean? = null,
         ): Settings = Settings(
             theme = themeFromKey(themeKey),
             dualPane = dualPane ?: DEFAULT.dualPane,
             showHidden = showHidden ?: DEFAULT.showHidden,
+            detailedList = detailedList ?: DEFAULT.detailedList,
             sort = SortSpec(
                 field = sortFieldFromKey(sortFieldKey),
                 ascending = sortAscending ?: DEFAULT.sort.ascending,

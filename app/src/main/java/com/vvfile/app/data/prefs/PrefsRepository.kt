@@ -54,6 +54,8 @@ class PrefsRepository private constructor(
 
     suspend fun setShowHidden(enabled: Boolean) = update { it.copy(showHidden = enabled) }
 
+    suspend fun setDetailedList(enabled: Boolean) = update { it.copy(detailedList = enabled) }
+
     suspend fun setSort(spec: SortSpec) = update { it.copy(sort = spec) }
 
     suspend fun setSortField(field: SortField) = update { current ->
@@ -85,6 +87,7 @@ private object PrefKeys {
     val THEME = stringPreferencesKey("theme")
     val DUAL_PANE = booleanPreferencesKey("dual_pane")
     val SHOW_HIDDEN = booleanPreferencesKey("show_hidden")
+    val DETAILED_LIST = booleanPreferencesKey("detailed_list")
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_ASCENDING = booleanPreferencesKey("sort_ascending")
     val START_PATH = stringPreferencesKey("start_path")
@@ -94,6 +97,7 @@ private fun Preferences.toSettings(): Settings = Settings.fromStorage(
     themeKey = this[PrefKeys.THEME],
     dualPane = this[PrefKeys.DUAL_PANE],
     showHidden = this[PrefKeys.SHOW_HIDDEN],
+    detailedList = this[PrefKeys.DETAILED_LIST],
     sortFieldKey = this[PrefKeys.SORT_FIELD],
     sortAscending = this[PrefKeys.SORT_ASCENDING],
     startPath = this[PrefKeys.START_PATH],
@@ -103,6 +107,7 @@ private fun MutablePreferences.write(settings: Settings) {
     this[PrefKeys.THEME] = Settings.themeKey(settings.theme)
     this[PrefKeys.DUAL_PANE] = settings.dualPane
     this[PrefKeys.SHOW_HIDDEN] = settings.showHidden
+    this[PrefKeys.DETAILED_LIST] = settings.detailedList
     this[PrefKeys.SORT_FIELD] = Settings.sortFieldKey(settings.sort.field)
     this[PrefKeys.SORT_ASCENDING] = settings.sort.ascending
     val startPath = Settings.normalizeStartPath(settings.startPath)

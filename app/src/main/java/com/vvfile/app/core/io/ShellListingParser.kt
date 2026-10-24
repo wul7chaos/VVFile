@@ -41,6 +41,8 @@ object ShellListingParser {
                 size = if (isDirectory) 0L else size,
                 lastModified = parseTime(groups[6], groups[7]),
                 isSymlink = symlink,
+                permissions = permissions.drop(1).takeIf { it.length == 9 },
+                owner = groups[3],
             )
         }.toList()
 

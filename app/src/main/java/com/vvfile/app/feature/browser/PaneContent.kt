@@ -62,6 +62,7 @@ fun PaneContent(
     onToggleSelect: (FileEntry) -> Unit,
     onRetry: () -> Unit,
     onNewFolder: () -> Unit,
+    showDetails: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -123,6 +124,7 @@ fun PaneContent(
                         FileRow(
                             entry = entry,
                             isSelected = entry.path in pane.selected,
+                            showDetails = showDetails,
                             onClick = {
                                 if (pane.selectionMode) {
                                     onToggleSelect(entry)

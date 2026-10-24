@@ -18,6 +18,8 @@ import java.nio.file.NotDirectoryException
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.PosixFileAttributes
+import java.nio.file.attribute.PosixFilePermission
 
 /**
  * 直接 IO 实现（应用自身权限）。所有磁盘访问在 [dispatcher] 上执行，
@@ -106,6 +108,7 @@ class NioFileSystem(
         val symbolicLink = Files.isSymbolicLink(this)
         val attributes = attributesFollowingLinks()
         val directory = attributes.isDirectory
+        val (permissions, owner) = posixInfo()
         return FileEntry(
             name = fileName?.toString().orEmpty(),
             path = toAbsolutePath().toString(),
@@ -113,8 +116,36 @@ class NioFileSystem(
             size = if (directory) 0L else attributes.size(),
             lastModified = attributes.lastModifiedTime().toMillis(),
             isSymlink = symbolicLink,
+            permissions = permissions,
+            owner = owner,
         )
     }
+
+    /** 外部存储（FUSE）可能不支持 POSIX 属性，失败时返回 null 不影响列表。 */
+    private fun Path.posixInfo(): Pair<String?, String?> = runCatching {
+        val attributes = Files.readAttributes(this, PosixFileAttributes::class.java)
+        val granted = attributes.permissions()
+        val text = buildString {
+            listOf(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.OWNER_EXECUTE,
+                PosixFilePermission.GROUP_READ,
+                PosixFilePermission.GROUP_WRITE,
+                PosixFilePermission.GROUP_EXECUTE,
+                PosixFilePermission.OTHERS_READ,
+                PosixFilePermission.OTHERS_WRITE,
+                PosixFilePermission.OTHERS_EXECUTE,
+            ).forEachIndexed { index, permission ->
+                if (permission in granted) {
+                    append("rwx"[index % 3])
+                } else {
+                    append('-')
+                }
+            }
+        }
+        text to attributes.owner().name
+    }.getOrElse { null to null }
 
     /** 默认跟随符号链接（`/sdcard` 这类入口必须仍可按目录进入）；断链回退到不跟随。 */
     private fun Path.attributesFollowingLinks(): BasicFileAttributes =

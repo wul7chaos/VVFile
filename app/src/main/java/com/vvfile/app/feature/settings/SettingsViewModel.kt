@@ -44,6 +44,8 @@ class SettingsViewModel(
 
     fun setShowHidden(enabled: Boolean) = write { repository.setShowHidden(enabled) }
 
+    fun setDetailedList(enabled: Boolean) = write { repository.setDetailedList(enabled) }
+
     fun setSort(spec: SortSpec) = write { repository.setSort(spec) }
 
     fun setSortField(field: SortField) = write { repository.setSortField(field) }

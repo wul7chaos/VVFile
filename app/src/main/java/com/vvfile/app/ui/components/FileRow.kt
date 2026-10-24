@@ -78,6 +78,7 @@ fun FileRow(
     isSelected: Boolean = false,
     onLongClick: () -> Unit = {},
     onSwipeSelect: () -> Unit = {},
+    showDetails: Boolean = false,
 ) {
     val haptics = LocalHapticFeedback.current
     var dragTotal by remember(entry.path) { mutableFloatStateOf(0f) }
@@ -160,7 +161,7 @@ fun FileRow(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = metaFor(entry),
+                    text = metaFor(entry, showDetails),
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 11.sp,
                         lineHeight = 14.sp,
@@ -182,8 +183,13 @@ fun FileRow(
     }
 }
 
-private fun metaFor(entry: FileEntry): String {
+private fun metaFor(entry: FileEntry, showDetails: Boolean): String {
     val time = TimeFormatter.formatShort(entry.lastModified)
+    if (showDetails) {
+        val permissions = entry.permissions ?: "---------"
+        val owner = entry.owner ?: "-"
+        return "$permissions $owner · $time"
+    }
     return if (entry.isDirectory) "文件夹 · $time" else "${SizeFormatter.format(entry.size)} · $time"
 }
 

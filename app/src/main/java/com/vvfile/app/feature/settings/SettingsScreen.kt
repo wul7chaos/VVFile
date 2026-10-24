@@ -93,6 +93,7 @@ fun SettingsScreen(
         onThemeChange = viewModel::setTheme,
         onDualPaneChange = viewModel::setDualPane,
         onShowHiddenChange = viewModel::setShowHidden,
+        onDetailedListChange = viewModel::setDetailedList,
         onSortFieldChange = viewModel::setSortField,
         onSortAscendingChange = viewModel::setSortAscending,
         onStartPathChange = viewModel::setStartPath,
@@ -108,6 +109,7 @@ internal fun SettingsContent(
     onThemeChange: (ThemeMode) -> Unit,
     onDualPaneChange: (Boolean) -> Unit,
     onShowHiddenChange: (Boolean) -> Unit,
+    onDetailedListChange: (Boolean) -> Unit = {},
     onSortFieldChange: (SortField) -> Unit,
     onSortAscendingChange: (Boolean) -> Unit,
     onStartPathChange: (String?) -> Unit = {},
@@ -152,6 +154,13 @@ internal fun SettingsContent(
                     subtitle = stringResource(R.string.settings_show_hidden_hint),
                     checked = settings.showHidden,
                     onCheckedChange = onShowHiddenChange,
+                )
+                RowDivider()
+                SettingSwitchRow(
+                    title = stringResource(R.string.settings_detailed_list),
+                    subtitle = stringResource(R.string.settings_detailed_list_hint),
+                    checked = settings.detailedList,
+                    onCheckedChange = onDetailedListChange,
                 )
                 RowDivider()
                 StartPathSetting(current = settings.startPath, onSave = onStartPathChange)
