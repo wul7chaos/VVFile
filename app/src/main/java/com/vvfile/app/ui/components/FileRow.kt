@@ -1,5 +1,9 @@
 package com.vvfile.app.ui.components
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -11,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vvfile.app.core.format.SizeFormatter
@@ -60,6 +67,7 @@ import com.vvfile.app.ui.theme.FileTintText
 import com.vvfile.app.ui.theme.FileTintVideo
 import com.vvfile.app.ui.theme.VVFileTheme
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -72,29 +80,55 @@ fun FileRow(
     onSwipeSelect: () -> Unit = {},
 ) {
     val haptics = LocalHapticFeedback.current
-    var dragAmount by remember(entry.path) { mutableStateOf(0f) }
+    var dragTotal by remember(entry.path) { mutableFloatStateOf(0f) }
+    var dragOffset by remember(entry.path) { mutableFloatStateOf(0f) }
+    var dragging by remember(entry.path) { mutableStateOf(false) }
+    val animatedOffset by animateFloatAsState(
+        targetValue = dragOffset,
+        // 拖动时跟手；松手后回弹到原位
+        animationSpec = if (dragging) {
+            snap()
+        } else {
+            spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow)
+        },
+        label = "rowSwipeOffset",
+    )
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(44.dp)
+            .offset { IntOffset(animatedOffset.roundToInt(), 0) }
             .clip(RoundedCornerShape(10.dp))
             .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .pointerInput(entry.path) {
                 detectHorizontalDragGestures(
-                    onDragStart = { dragAmount = 0f },
+                    onDragStart = {
+                        dragTotal = 0f
+                        dragOffset = 0f
+                        dragging = true
+                    },
                     onHorizontalDrag = { change, amount ->
-                        dragAmount += amount
                         change.consume()
+                        dragTotal += amount
+                        val maxOffset = 28.dp.toPx()
+                        // 0.55 的阻尼，让行跟随手指轻移，而不是整行滑走
+                        dragOffset = (dragOffset + amount * 0.55f).coerceIn(-maxOffset, maxOffset)
                     },
                     onDragEnd = {
-                        if (abs(dragAmount) >= 48.dp.toPx()) {
+                        dragging = false
+                        if (abs(dragTotal) >= 48.dp.toPx()) {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onSwipeSelect()
                         }
-                        dragAmount = 0f
+                        dragOffset = 0f
+                        dragTotal = 0f
                     },
-                    onDragCancel = { dragAmount = 0f },
+                    onDragCancel = {
+                        dragging = false
+                        dragOffset = 0f
+                        dragTotal = 0f
+                    },
                 )
             },
     ) {
