@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 顶栏 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_back">返回</string>
+
+    <!-- 分组 -->
+    <string name="settings_group_appearance">外观</string>
+    <string name="settings_group_browsing">浏览</string>
+    <string name="settings_group_about">关于</string>
+
+    <!-- 外观 -->
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_hint">跟随系统，或固定深色 / 浅色</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_theme_light">浅色</string>
+
+    <!-- 浏览 -->
+    <string name="settings_dual_pane">双窗格</string>
+    <string name="settings_dual_pane_hint">左右两栏对比文件；关闭后为单窗格</string>
+    <string name="settings_show_hidden">显示隐藏文件</string>
+    <string name="settings_show_hidden_hint">展示以 . 开头的文件和文件夹</string>
+    <string name="settings_default_sort">默认排序</string>
+    <string name="settings_default_sort_hint">新建窗格时使用的排序方式</string>
+    <string name="settings_sort_name">名称</string>
+    <string name="settings_sort_date">时间</string>
+    <string name="settings_sort_size">大小</string>
+    <string name="settings_sort_type">类型</string>
+    <string name="settings_sort_ascending">升序</string>
+    <string name="settings_sort_ascending_hint">关闭后按降序排列</string>
+
+    <!-- 关于 -->
+    <string name="settings_about_version">版本</string>
+    <string name="settings_about_name">VVFile</string>
+    <string name="settings_about_desc">双窗格文件管理器，支持复制 / 移动 / 压缩解压、文本编辑与终端（后续里程碑）。</string>
+
+    <!-- 错误 -->
+    <string name="settings_save_failed">保存设置失败</string>
+</resources>
