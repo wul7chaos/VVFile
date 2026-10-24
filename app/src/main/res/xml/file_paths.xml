@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 文件管理器需要分享任意可读文件，授权仅限单次 URI -->
+    <root-path
+        name="vv_root"
+        path="/" />
+</paths>
