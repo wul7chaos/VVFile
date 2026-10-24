@@ -40,7 +40,9 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Menu
@@ -48,7 +50,6 @@ import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material.icons.outlined.Visibility
@@ -61,8 +62,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -93,6 +96,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vvfile.app.R
+import com.vvfile.app.core.path.PathUtils
+import com.vvfile.app.core.result.ConflictPolicy
+import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 import com.vvfile.app.ui.components.PathBar
@@ -133,8 +139,24 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
 
     val activePane = if (state.active == PaneId.LEFT) state.left else state.right
     val selectionActive = activePane.selectionMode
-    val notImplemented: () -> Unit = {
-        Toast.makeText(context, R.string.ui_action_m2_placeholder, Toast.LENGTH_SHORT).show()
+    val activeSelectedEntries = activePane.entries.filter { it.path in activePane.selected }
+    val singleSelected = activeSelectedEntries.singleOrNull()
+    val canUnzip = singleSelected != null && !singleSelected.isDirectory && singleSelected.extension == "zip"
+    val defaultFolderName = stringResource(R.string.ui_ops_default_folder)
+    val defaultFileName = stringResource(R.string.ui_ops_default_file)
+    val defaultZipName = stringResource(R.string.ui_ops_zip_default_multi)
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var nameDialog by remember { mutableStateOf<NameDialogState?>(null) }
+
+    // 一次性操作提示：展示后立即消费，避免重组重复弹出
+    LaunchedEffect(state.message) {
+        val message = state.message ?: return@LaunchedEffect
+        val text = when (message) {
+            is UiMessage.Result -> formatResult(context, message)
+            is UiMessage.Simple -> context.getString(message.textRes)
+        }
+        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+        viewModel.consumeMessage()
     }
 
     // 返回键收敛顺序：选择态 → 抽屉 → 交给系统（退出）
@@ -208,7 +230,10 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                     },
                     onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.LEFT, entry.path) },
                     onRetry = { viewModel.refresh(PaneId.LEFT) },
-                    onNewFolder = notImplemented,
+                    onNewFolder = {
+                        viewModel.setActive(PaneId.LEFT)
+                        nameDialog = NameDialogState(NameDialogMode.NEW_FOLDER, defaultFolderName)
+                    },
                     modifier = Modifier.weight(1f),
                 )
                 if (state.dualPane) {
@@ -233,7 +258,10 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                         },
                         onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.RIGHT, entry.path) },
                         onRetry = { viewModel.refresh(PaneId.RIGHT) },
-                        onNewFolder = notImplemented,
+                        onNewFolder = {
+                            viewModel.setActive(PaneId.RIGHT)
+                            nameDialog = NameDialogState(NameDialogMode.NEW_FOLDER, defaultFolderName)
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -241,17 +269,34 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
 
             if (selectionActive) {
                 SelectionBottomBar(
-                    onCopy = notImplemented,
-                    onMove = notImplemented,
-                    onDelete = notImplemented,
-                    onMoreAction = notImplemented,
+                    onCopy = viewModel::copySelectionToOtherPane,
+                    onMove = viewModel::moveSelectionToOtherPane,
+                    onDelete = { showDeleteConfirm = true },
+                    canRename = singleSelected != null,
+                    onRename = {
+                        singleSelected?.let { nameDialog = NameDialogState(NameDialogMode.RENAME, it.name) }
+                    },
+                    onCompress = {
+                        val base = singleSelected?.let { defaultZipBaseName(it) }
+                        nameDialog = NameDialogState(
+                            NameDialogMode.ZIP,
+                            if (base != null) "$base.zip" else defaultZipName,
+                        )
+                    },
+                    canUnzip = canUnzip,
+                    onUnzip = viewModel::unzipSelection,
                 )
             } else {
                 BrowserBottomBar(
                     pane = activePane,
                     onBack = { viewModel.goBack(state.active) },
                     onForward = { viewModel.goForward(state.active) },
-                    onNew = { Toast.makeText(context, "新建：M2 接入", Toast.LENGTH_SHORT).show() },
+                    onNewFolder = {
+                        nameDialog = NameDialogState(NameDialogMode.NEW_FOLDER, defaultFolderName)
+                    },
+                    onNewFile = {
+                        nameDialog = NameDialogState(NameDialogMode.NEW_FILE, defaultFileName)
+                    },
                     onSwap = viewModel::swapPanes,
                     onUp = { viewModel.navigateUp(state.active) },
                 )
@@ -261,6 +306,41 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
 
     if (showAbout) {
         AboutDialog(onDismiss = { showAbout = false })
+    }
+
+    state.operation?.let { operation ->
+        OperationProgressDialog(operation = operation, onCancel = viewModel::cancelOperation)
+    }
+
+    state.conflictPrompt?.let { prompt ->
+        ConflictDialog(prompt = prompt, onResolve = viewModel::resolveConflict)
+    }
+
+    if (showDeleteConfirm) {
+        DeleteConfirmDialog(
+            count = activePane.selected.size,
+            onConfirm = {
+                showDeleteConfirm = false
+                viewModel.deleteSelection()
+            },
+            onDismiss = { showDeleteConfirm = false },
+        )
+    }
+
+    nameDialog?.let { dialog ->
+        NameInputDialog(
+            state = dialog,
+            onDismiss = { nameDialog = null },
+            onConfirm = { name ->
+                nameDialog = null
+                when (dialog.mode) {
+                    NameDialogMode.RENAME -> viewModel.renameSelection(name)
+                    NameDialogMode.NEW_FOLDER -> viewModel.createFolder(name)
+                    NameDialogMode.NEW_FILE -> viewModel.createFile(name)
+                    NameDialogMode.ZIP -> viewModel.zipSelection(name)
+                }
+            },
+        )
     }
 }
 
@@ -552,10 +632,12 @@ private fun BrowserBottomBar(
     pane: PaneState,
     onBack: () -> Unit,
     onForward: () -> Unit,
-    onNew: () -> Unit,
+    onNewFolder: () -> Unit,
+    onNewFile: () -> Unit,
     onSwap: () -> Unit,
     onUp: () -> Unit,
 ) {
+    var newOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -567,7 +649,33 @@ private fun BrowserBottomBar(
     ) {
         NavAction(Icons.AutoMirrored.Outlined.ArrowBack, "后退", pane.canGoBack, Modifier.weight(1f), onBack)
         NavAction(Icons.AutoMirrored.Outlined.ArrowForward, "前进", pane.canGoForward, Modifier.weight(1f), onForward)
-        NavAction(Icons.Outlined.Add, "新建", true, Modifier.weight(1f), onNew)
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            NavAction(
+                icon = Icons.Outlined.Add,
+                label = "新建",
+                enabled = true,
+                modifier = Modifier.fillMaxSize(),
+                onClick = { newOpen = true },
+            )
+            DropdownMenu(expanded = newOpen, onDismissRequest = { newOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.ui_ops_new_folder_title)) },
+                    leadingIcon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
+                    onClick = {
+                        newOpen = false
+                        onNewFolder()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.ui_ops_new_file_title)) },
+                    leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
+                    onClick = {
+                        newOpen = false
+                        onNewFile()
+                    },
+                )
+            }
+        }
         NavAction(Icons.Outlined.SwapHoriz, "交换", true, Modifier.weight(1f), onSwap)
         NavAction(Icons.Outlined.ArrowUpward, "上级", pane.path != "/", Modifier.weight(1f), onUp)
     }
@@ -579,7 +687,11 @@ private fun SelectionBottomBar(
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onDelete: () -> Unit,
-    onMoreAction: () -> Unit,
+    canRename: Boolean,
+    onRename: () -> Unit,
+    onCompress: () -> Unit,
+    canUnzip: Boolean,
+    onUnzip: () -> Unit,
 ) {
     var moreOpen by remember { mutableStateOf(false) }
     Row(
@@ -625,25 +737,21 @@ private fun SelectionBottomBar(
                 SelectionMoreItem(
                     icon = Icons.Outlined.Edit,
                     label = stringResource(R.string.ui_action_rename),
-                    onAction = onMoreAction,
+                    enabled = canRename,
+                    onAction = onRename,
                     onClose = { moreOpen = false },
                 )
                 SelectionMoreItem(
                     icon = Icons.Outlined.FolderZip,
                     label = stringResource(R.string.ui_action_compress),
-                    onAction = onMoreAction,
+                    onAction = onCompress,
                     onClose = { moreOpen = false },
                 )
                 SelectionMoreItem(
-                    icon = Icons.Outlined.Share,
-                    label = stringResource(R.string.ui_action_share),
-                    onAction = onMoreAction,
-                    onClose = { moreOpen = false },
-                )
-                SelectionMoreItem(
-                    icon = Icons.Outlined.Info,
-                    label = stringResource(R.string.ui_action_properties),
-                    onAction = onMoreAction,
+                    icon = Icons.Outlined.FolderOpen,
+                    label = stringResource(R.string.ui_action_unzip),
+                    enabled = canUnzip,
+                    onAction = onUnzip,
                     onClose = { moreOpen = false },
                 )
             }
@@ -655,12 +763,14 @@ private fun SelectionBottomBar(
 private fun SelectionMoreItem(
     icon: ImageVector,
     label: String,
+    enabled: Boolean = true,
     onAction: () -> Unit,
     onClose: () -> Unit,
 ) {
     DropdownMenuItem(
         text = { Text(label) },
         leadingIcon = { Icon(imageVector = icon, contentDescription = null) },
+        enabled = enabled,
         onClick = {
             onClose()
             onAction()
@@ -758,6 +868,215 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         },
     )
 }
+
+private enum class NameDialogMode { RENAME, NEW_FOLDER, NEW_FILE, ZIP }
+
+private data class NameDialogState(
+    val mode: NameDialogMode,
+    val initialName: String,
+)
+
+/** 压缩默认名：去掉最后一个扩展名，保留 `.hidden` 这类点开头的完整名称。 */
+private fun defaultZipBaseName(entry: FileEntry): String {
+    val dot = entry.name.lastIndexOf('.')
+    return if (dot > 0) entry.name.substring(0, dot) else entry.name
+}
+
+/** 操作摘要 → Toast 文案。 */
+private fun formatResult(context: Context, message: UiMessage.Result): String {
+    if (message.cancelled) return context.getString(R.string.ui_ops_result_cancelled)
+    val reason = message.failureReason?.takeIf { it.isNotBlank() }
+        ?: context.getString(R.string.ui_ops_unknown_error)
+    return when {
+        message.failed > 0 && message.succeeded == 0 ->
+            context.getString(R.string.ui_ops_result_failed, reason)
+        message.failed > 0 ->
+            context.getString(R.string.ui_ops_result_partial, message.succeeded, message.failed)
+        message.skipped > 0 ->
+            context.getString(R.string.ui_ops_result_skipped, message.succeeded, message.skipped)
+        message.succeeded > 0 ->
+            context.getString(R.string.ui_ops_result_done_count, message.succeeded)
+        else -> context.getString(R.string.ui_ops_result_done)
+    }
+}
+
+@Composable
+private fun OperationProgressDialog(operation: OperationUiState, onCancel: () -> Unit) {
+    val title = stringResource(
+        when (operation.kind) {
+            OperationKind.COPY -> R.string.ui_ops_copy_title
+            OperationKind.MOVE -> R.string.ui_ops_move_title
+            OperationKind.DELETE -> R.string.ui_ops_delete_progress_title
+            OperationKind.ZIP -> R.string.ui_ops_zip_progress_title
+            OperationKind.UNZIP -> R.string.ui_ops_unzip_progress_title
+        },
+    )
+    val percent = (operation.progress * 100f).toInt().coerceIn(0, 100)
+    val barModifier = Modifier
+        .fillMaxWidth()
+        .height(6.dp)
+        .clip(RoundedCornerShape(3.dp))
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(
+                    text = operation.currentName.ifBlank { stringResource(R.string.ui_ops_preparing) },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(10.dp))
+                if (operation.preparing) {
+                    LinearProgressIndicator(
+                        modifier = barModifier,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { operation.progress },
+                        modifier = barModifier,
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = if (operation.totalItems > 0) {
+                            stringResource(
+                                R.string.ui_ops_progress_items,
+                                operation.processedItems,
+                                operation.totalItems,
+                            )
+                        } else {
+                            ""
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = stringResource(R.string.ui_ops_progress_percent, percent),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.ui_ops_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun ConflictDialog(prompt: ConflictPrompt, onResolve: (ConflictPolicy?) -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onResolve(null) },
+        title = { Text(stringResource(R.string.ui_ops_conflict_title)) },
+        text = { Text(stringResource(R.string.ui_ops_conflict_message, prompt.count)) },
+        confirmButton = {
+            Row {
+                TextButton(onClick = { onResolve(ConflictPolicy.REPLACE) }) {
+                    Text(stringResource(R.string.ui_ops_conflict_replace))
+                }
+                TextButton(onClick = { onResolve(ConflictPolicy.SKIP) }) {
+                    Text(stringResource(R.string.ui_ops_conflict_skip))
+                }
+                TextButton(onClick = { onResolve(ConflictPolicy.RENAME) }) {
+                    Text(stringResource(R.string.ui_ops_conflict_rename))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { onResolve(null) }) { Text(stringResource(R.string.ui_ops_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun DeleteConfirmDialog(
+    count: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ui_ops_delete_title)) },
+        text = { Text(stringResource(R.string.ui_ops_delete_message, count)) },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                colors = ButtonDefaults.textButtonColors(contentColor = VVDanger),
+            ) {
+                Text(stringResource(R.string.ui_ops_confirm_delete))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_ops_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun NameInputDialog(
+    state: NameDialogState,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by remember(state) { mutableStateOf(state.initialName) }
+    val candidate = name.trim()
+    val error = remember(candidate) {
+        if (candidate.isEmpty()) {
+            null
+        } else {
+            runCatching { PathUtils.validateFileName(candidate) }.exceptionOrNull()?.message
+        }
+    }
+    val canConfirm = candidate.isNotEmpty() && error == null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(nameDialogTitle(state.mode)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.ui_ops_name_label)) },
+                isError = error != null,
+                supportingText = if (error != null) {
+                    { Text(error) }
+                } else {
+                    null
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(candidate) }, enabled = canConfirm) {
+                Text(stringResource(R.string.ui_ops_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ui_ops_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun nameDialogTitle(mode: NameDialogMode): String = stringResource(
+    when (mode) {
+        NameDialogMode.RENAME -> R.string.ui_ops_rename_title
+        NameDialogMode.NEW_FOLDER -> R.string.ui_ops_new_folder_title
+        NameDialogMode.NEW_FILE -> R.string.ui_ops_new_file_title
+        NameDialogMode.ZIP -> R.string.ui_ops_zip_dialog_title
+    },
+)
 
 private fun hasStoragePermission(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

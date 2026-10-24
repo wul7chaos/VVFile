@@ -3,12 +3,21 @@ package com.vvfile.app.feature.browser
 import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vvfile.app.R
 import com.vvfile.app.ServiceLocator
+import com.vvfile.app.core.path.PathUtils
+import com.vvfile.app.core.result.ConflictPolicy
+import com.vvfile.app.core.result.OperationEvent
+import com.vvfile.app.core.result.OperationPhase
+import com.vvfile.app.core.result.OperationProgress
+import com.vvfile.app.core.result.OperationResult
 import com.vvfile.app.core.shell.RootManager
+import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,10 +29,13 @@ import java.io.FileNotFoundException
 class BrowserViewModel : ViewModel() {
 
     private val repository = ServiceLocator.fileRepository
+    private val operator = ServiceLocator.fileOperator
     private val _state = MutableStateFlow(BrowserUiState())
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
 
     private val loadJobs = mutableMapOf<PaneId, Job>()
+    private var operationJob: Job? = null
+    private var pendingTransfer: PendingTransfer? = null
     private val defaultPath: String = runCatching {
         Environment.getExternalStorageDirectory().absolutePath
     }.getOrDefault("/storage/emulated/0")
@@ -165,6 +177,280 @@ class BrowserViewModel : ViewModel() {
                 active = PaneId.RIGHT,
             )
         }
+
+    // -------------------------------------------------------------- 文件操作 --
+
+    fun copySelectionToOtherPane() = startTransfer(OperationKind.COPY)
+
+    fun moveSelectionToOtherPane() = startTransfer(OperationKind.MOVE)
+
+    fun deleteSelection() {
+        if (isBusy()) return notifyBusy()
+        val paths = selectedPaths(activePaneState())
+        if (paths.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_nothing_selected))
+        startFlow(OperationKind.DELETE) { operator.delete(paths) }
+    }
+
+    fun renameSelection(newName: String) {
+        if (isBusy()) return notifyBusy()
+        val entry = selectedEntries(activePaneState()).singleOrNull()
+            ?: return postMessage(UiMessage.Simple(R.string.ui_ops_rename_requires_single))
+        val name = validateName(newName) ?: return
+        if (name == entry.name) return
+        viewModelScope.launch {
+            try {
+                val result = operator.rename(entry.path, name)
+                if (result.isSuccess) {
+                    postMessage(UiMessage.Simple(R.string.ui_ops_rename_done))
+                } else {
+                    postResult(result)
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                postMessage(UiMessage.Result(0, 1, 0, false, error.message))
+            }
+            afterOperation()
+        }
+    }
+
+    fun createFolder(name: String) = createEntry(name, directory = true)
+
+    fun createFile(name: String) = createEntry(name, directory = false)
+
+    fun zipSelection(zipName: String) {
+        if (isBusy()) return notifyBusy()
+        val pane = activePaneState()
+        val sources = selectedPaths(pane)
+        if (sources.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_nothing_selected))
+        if (pane.path.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
+        val name = validateName(zipName) ?: return
+        val fileName = if (name.endsWith(".zip", ignoreCase = true)) name else "$name.zip"
+        val targetZip = PathUtils.join(pane.path, fileName)
+        if (File(targetZip).exists()) {
+            return postMessage(UiMessage.Simple(R.string.ui_ops_zip_exists))
+        }
+        startFlow(OperationKind.ZIP) { operator.zip(sources, targetZip) }
+    }
+
+    fun unzipSelection() {
+        if (isBusy()) return notifyBusy()
+        val pane = activePaneState()
+        val zip = selectedEntries(pane).singleOrNull()
+            ?.takeIf { !it.isDirectory && it.extension == "zip" }
+            ?: return postMessage(UiMessage.Simple(R.string.ui_ops_unzip_requires_zip))
+        if (pane.path.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
+        startFlow(OperationKind.UNZIP) { operator.unzip(zip.path, pane.path) }
+    }
+
+    /** 冲突对话框的选择；policy 为 null 表示取消。 */
+    fun resolveConflict(policy: ConflictPolicy?) {
+        val pending = pendingTransfer
+        pendingTransfer = null
+        _state.update { it.copy(conflictPrompt = null) }
+        if (pending == null || policy == null) return
+        runTransfer(pending.kind, pending.sources, pending.targetDir, policy)
+    }
+
+    fun cancelOperation() {
+        operationJob?.cancel()
+    }
+
+    /** UI 展示完一次性提示后调用，避免重复 Toast。 */
+    fun consumeMessage() {
+        _state.update { if (it.message == null) it else it.copy(message = null) }
+    }
+
+    private fun startTransfer(kind: OperationKind) {
+        if (isBusy()) return notifyBusy()
+        val s = _state.value
+        if (!s.dualPane) {
+            return postMessage(UiMessage.Simple(R.string.ui_ops_single_pane_unavailable))
+        }
+        val sourcePane = if (s.active == PaneId.LEFT) s.left else s.right
+        val targetPane = if (s.active == PaneId.LEFT) s.right else s.left
+        val sources = selectedPaths(sourcePane)
+        if (sources.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_nothing_selected))
+        if (sourcePane.path == targetPane.path) {
+            return postMessage(UiMessage.Simple(R.string.ui_ops_same_dir))
+        }
+        if (targetPane.path.isEmpty()) {
+            return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
+        }
+        val targetDir = targetPane.path
+        val normalizedTarget = PathUtils.normalize(targetDir)
+        val intoSelf = sources.any { source ->
+            val normalizedSource = PathUtils.normalize(source)
+            normalizedSource == normalizedTarget || PathUtils.isAncestor(normalizedSource, normalizedTarget)
+        }
+        if (intoSelf) {
+            return postMessage(UiMessage.Simple(R.string.ui_ops_into_self))
+        }
+        operationJob = viewModelScope.launch {
+            val conflicts = try {
+                operator.findConflicts(sources, targetDir)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                postMessage(UiMessage.Simple(R.string.ui_ops_conflict_check_failed))
+                return@launch
+            }
+            if (conflicts.isEmpty()) {
+                operationJob = null
+                runTransfer(kind, sources, targetDir, ConflictPolicy.RENAME)
+            } else {
+                pendingTransfer = PendingTransfer(kind, sources, targetDir)
+                _state.update { it.copy(conflictPrompt = ConflictPrompt(kind, conflicts.size)) }
+            }
+        }
+    }
+
+    private fun runTransfer(
+        kind: OperationKind,
+        sources: List<String>,
+        targetDir: String,
+        policy: ConflictPolicy,
+    ) {
+        startFlow(kind) {
+            if (kind == OperationKind.COPY) {
+                operator.copy(sources, targetDir, policy)
+            } else {
+                operator.move(sources, targetDir, policy)
+            }
+        }
+    }
+
+    private fun startFlow(kind: OperationKind, flowBuilder: () -> Flow<OperationEvent>) {
+        if (isBusy()) return notifyBusy()
+        _state.update { it.copy(operation = OperationUiState(kind = kind), conflictPrompt = null) }
+        operationJob = viewModelScope.launch {
+            try {
+                flowBuilder().collect { event ->
+                    when (event) {
+                        is OperationEvent.Progress -> updateProgress(event.progress)
+                        is OperationEvent.Finished -> onOperationFinished(event.result)
+                    }
+                }
+            } catch (cancel: CancellationException) {
+                _state.update { it.copy(operation = null) }
+                postMessage(UiMessage.Simple(R.string.ui_ops_result_cancelled))
+                afterOperation()
+                throw cancel
+            } catch (error: Exception) {
+                _state.update { it.copy(operation = null) }
+                postMessage(UiMessage.Result(0, 1, 0, false, error.message))
+                afterOperation()
+            }
+        }
+    }
+
+    private fun updateProgress(progress: OperationProgress) {
+        _state.update { s ->
+            val current = s.operation ?: return@update s
+            s.copy(
+                operation = current.copy(
+                    progress = progress.fraction,
+                    currentName = progress.currentName,
+                    processedItems = progress.processedItems,
+                    totalItems = progress.totalItems,
+                    preparing = progress.phase == OperationPhase.PREPARING,
+                ),
+            )
+        }
+    }
+
+    private fun onOperationFinished(result: OperationResult) {
+        _state.update { it.copy(operation = null) }
+        postResult(result)
+        afterOperation()
+    }
+
+    /** 操作结束后刷新双窗格并退出选择态（目标窗格也刷新）。 */
+    private fun afterOperation() {
+        _state.update { s ->
+            s.copy(
+                left = s.left.copy(selected = emptySet()),
+                right = s.right.copy(selected = emptySet()),
+            )
+        }
+        refreshAll()
+    }
+
+    private fun createEntry(name: String, directory: Boolean) {
+        if (isBusy()) return notifyBusy()
+        val pane = activePaneState()
+        if (pane.path.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
+        val validated = validateName(name) ?: return
+        viewModelScope.launch {
+            try {
+                val result = if (directory) {
+                    operator.createDirectory(pane.path, validated)
+                } else {
+                    operator.createFile(pane.path, validated)
+                }
+                if (result.isSuccess) {
+                    postMessage(
+                        UiMessage.Simple(
+                            if (directory) R.string.ui_ops_folder_created else R.string.ui_ops_file_created,
+                        ),
+                    )
+                } else {
+                    postResult(result)
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                postMessage(UiMessage.Result(0, 1, 0, false, error.message))
+            }
+            afterOperation()
+        }
+    }
+
+    private fun isBusy(): Boolean = operationJob?.isActive == true
+
+    private fun notifyBusy() {
+        postMessage(UiMessage.Simple(R.string.ui_ops_busy))
+    }
+
+    /** 校验并返回去除首尾空白的文件名；非法时推送提示并返回 null。 */
+    private fun validateName(name: String): String? {
+        val candidate = name.trim()
+        return runCatching { PathUtils.validateFileName(candidate) }.getOrElse {
+            postMessage(UiMessage.Simple(R.string.ui_ops_name_invalid))
+            null
+        }
+    }
+
+    private fun activePaneState(): PaneState =
+        if (_state.value.active == PaneId.LEFT) _state.value.left else _state.value.right
+
+    private fun selectedEntries(pane: PaneState): List<FileEntry> =
+        pane.entries.filter { it.path in pane.selected }
+
+    private fun selectedPaths(pane: PaneState): List<String> =
+        selectedEntries(pane).map { it.path }
+
+    private fun postMessage(message: UiMessage) {
+        _state.update { it.copy(message = message) }
+    }
+
+    private fun postResult(result: OperationResult) {
+        postMessage(
+            UiMessage.Result(
+                succeeded = result.succeeded.size,
+                failed = result.failures.size,
+                skipped = result.skipped.size,
+                cancelled = result.cancelled,
+                failureReason = result.failures.firstOrNull()?.reason,
+            ),
+        )
+    }
+
+    private data class PendingTransfer(
+        val kind: OperationKind,
+        val sources: List<String>,
+        val targetDir: String,
+    )
 
     /** 文件打开在 M2 接入；此处只暴露判断给 UI。 */
     fun isDirectory(path: String): Boolean = File(path).isDirectory
