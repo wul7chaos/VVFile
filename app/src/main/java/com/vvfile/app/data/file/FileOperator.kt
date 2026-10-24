@@ -27,7 +27,11 @@ interface FileOperator {
 
     fun zip(sources: List<String>, targetZip: String): Flow<OperationEvent>
 
-    fun unzip(zipPath: String, targetDir: String): Flow<OperationEvent>
+    fun unzip(
+        zipPath: String,
+        targetDir: String,
+        policy: ConflictPolicy = ConflictPolicy.REPLACE,
+    ): Flow<OperationEvent>
 
     suspend fun rename(path: String, newName: String): OperationResult
 
@@ -37,4 +41,7 @@ interface FileOperator {
 
     /** 列出会在目标目录发生冲突的源；UI 据此弹出覆盖/跳过/重命名选择。 */
     suspend fun findConflicts(sources: List<String>, targetDir: String): List<ConflictInfo>
+
+    /** 解压前探测 zip 内条目与目标目录的同名冲突。 */
+    suspend fun findZipConflicts(zipPath: String, targetDir: String): List<ConflictInfo>
 }

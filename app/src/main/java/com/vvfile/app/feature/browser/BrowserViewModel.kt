@@ -37,6 +37,7 @@ class BrowserViewModel : ViewModel() {
     private val loadJobs = mutableMapOf<PaneId, Job>()
     private var operationJob: Job? = null
     private var pendingTransfer: PendingTransfer? = null
+    private var pendingUnzip: PendingUnzip? = null
     private val defaultPath: String = runCatching {
         Environment.getExternalStorageDirectory().absolutePath
     }.getOrDefault("/storage/emulated/0")
@@ -264,11 +265,35 @@ class BrowserViewModel : ViewModel() {
             ?.takeIf { !it.isDirectory && it.extension == "zip" }
             ?: return postMessage(UiMessage.Simple(R.string.ui_ops_unzip_requires_zip))
         if (pane.path.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
-        startFlow(OperationKind.UNZIP) { operator.unzip(zip.path, pane.path) }
+        viewModelScope.launch {
+            try {
+                val conflicts = operator.findZipConflicts(zip.path, pane.path)
+                if (conflicts.isEmpty()) {
+                    startFlow(OperationKind.UNZIP) { operator.unzip(zip.path, pane.path) }
+                } else {
+                    pendingUnzip = PendingUnzip(zip.path, pane.path)
+                    _state.update {
+                        it.copy(conflictPrompt = ConflictPrompt(OperationKind.UNZIP, conflicts.size))
+                    }
+                }
+            } catch (error: Exception) {
+                postMessage(UiMessage.Simple(R.string.ui_ops_unzip_probe_failed))
+            }
+        }
     }
 
     /** 冲突对话框的选择；policy 为 null 表示取消。 */
     fun resolveConflict(policy: ConflictPolicy?) {
+        val pendingZip = pendingUnzip
+        if (pendingZip != null) {
+            pendingUnzip = null
+            _state.update { it.copy(conflictPrompt = null) }
+            if (policy == null) return
+            startFlow(OperationKind.UNZIP) {
+                operator.unzip(pendingZip.zipPath, pendingZip.targetDir, policy)
+            }
+            return
+        }
         val pending = pendingTransfer
         pendingTransfer = null
         _state.update { it.copy(conflictPrompt = null) }
@@ -473,6 +498,11 @@ class BrowserViewModel : ViewModel() {
     private data class PendingTransfer(
         val kind: OperationKind,
         val sources: List<String>,
+        val targetDir: String,
+    )
+
+    private data class PendingUnzip(
+        val zipPath: String,
         val targetDir: String,
     )
 

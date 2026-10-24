@@ -69,8 +69,12 @@ class LocalFileOperator(
         emit(OperationEvent.Finished(result))
     }.flowOn(io)
 
-    override fun unzip(zipPath: String, targetDir: String): Flow<OperationEvent> = flow {
-        val result = runUnzip(zipPath, targetDir) { emit(OperationEvent.Progress(it)) }
+    override fun unzip(
+        zipPath: String,
+        targetDir: String,
+        policy: ConflictPolicy,
+    ): Flow<OperationEvent> = flow {
+        val result = runUnzip(zipPath, targetDir, policy) { emit(OperationEvent.Progress(it)) }
         emit(OperationEvent.Finished(result))
     }.flowOn(io)
 
@@ -115,6 +119,27 @@ class LocalFileOperator(
             val name = Paths.get(source).fileName?.toString() ?: return@mapNotNull null
             val target = root.resolve(name)
             if (Files.exists(target)) ConflictInfo(source, target.toString()) else null
+        }
+    }
+
+    override suspend fun findZipConflicts(
+        zipPath: String,
+        targetDir: String,
+    ): List<ConflictInfo> = withContext(io) {
+        val root = Paths.get(targetDir)
+        ZipFile(Paths.get(zipPath).toFile()).use { zip ->
+            zip.entries().asSequence()
+                .filter { !it.isDirectory }
+                .mapNotNull { entry ->
+                    val target = root.resolve(entry.name).normalize()
+                    if (!target.startsWith(root)) return@mapNotNull null
+                    if (Files.exists(target)) {
+                        ConflictInfo(entry.name, target.toString())
+                    } else {
+                        null
+                    }
+                }
+                .toList()
         }
     }
 
@@ -426,10 +451,12 @@ class LocalFileOperator(
     private suspend fun runUnzip(
         zipPath: String,
         targetDir: String,
+        policy: ConflictPolicy,
         report: suspend (OperationProgress) -> Unit,
     ): OperationResult {
         val root = Paths.get(targetDir)
         val succeeded = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
         val failures = mutableListOf<OperationFailure>()
         report(OperationProgress(phase = OperationPhase.PREPARING, currentName = "正在统计…"))
 
@@ -441,7 +468,7 @@ class LocalFileOperator(
 
             for (entry in entries) {
                 coroutineContext.ensureActive()
-                val out = root.resolve(entry.name).normalize()
+                var out = root.resolve(entry.name).normalize()
                 // Zip Slip：规范化后必须仍在目标目录内
                 if (!out.startsWith(root)) {
                     failures += OperationFailure(entry.name, "非法的压缩包路径")
@@ -449,9 +476,32 @@ class LocalFileOperator(
                 }
                 try {
                     if (entry.isDirectory) {
+                        if (Files.exists(out) && !Files.isDirectory(out)) {
+                            when (policy) {
+                                ConflictPolicy.SKIP -> {
+                                    skipped += entry.name
+                                    tracker.completeItem(entry.name)
+                                    continue
+                                }
+                                ConflictPolicy.REPLACE -> deleteRecursively(out)
+                                ConflictPolicy.RENAME -> out = uniquePath(out)
+                            }
+                        }
                         Files.createDirectories(out)
+                        succeeded += out.toString()
                         tracker.completeItem(entry.name)
                     } else {
+                        if (Files.exists(out)) {
+                            when (policy) {
+                                ConflictPolicy.SKIP -> {
+                                    skipped += entry.name
+                                    tracker.completeItem(entry.name)
+                                    continue
+                                }
+                                ConflictPolicy.REPLACE -> Unit
+                                ConflictPolicy.RENAME -> out = uniquePath(out)
+                            }
+                        }
                         out.parent?.let { Files.createDirectories(it) }
                         zip.getInputStream(entry).use { input ->
                             Files.newOutputStream(
@@ -463,6 +513,7 @@ class LocalFileOperator(
                                 copyStream(input, output, entry.name, tracker)
                             }
                         }
+                        succeeded += out.toString()
                         tracker.completeItem(entry.name)
                     }
                 } catch (cancel: CancellationException) {
@@ -472,7 +523,7 @@ class LocalFileOperator(
                 }
             }
         }
-        return OperationResult(succeeded, failures = failures)
+        return OperationResult(succeeded, skipped = skipped, failures = failures)
     }
 
     // ----------------------------------------------------------------- helpers --

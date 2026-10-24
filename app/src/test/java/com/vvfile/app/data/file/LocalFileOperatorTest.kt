@@ -175,4 +175,69 @@ class LocalFileOperatorTest {
         assertEquals(1, conflicts.size)
         assertEquals(source.absolutePath, conflicts.first().sourcePath)
     }
+
+    private fun makeZip(name: String, content: String): File {
+        val zip = File(temp.root, name)
+        ZipOutputStream(zip.outputStream()).use { output ->
+            output.putNextEntry(ZipEntry("a.txt"))
+            output.write(content.toByteArray())
+            output.closeEntry()
+        }
+        return zip
+    }
+
+    @Test
+    fun `unzip skip keeps existing target`() {
+        val zip = makeZip("skip.zip", "new")
+        val out = temp.newFolder("skip-out")
+        write(File(out, "a.txt"), "old")
+
+        val result = collect(
+            operator.unzip(zip.absolutePath, out.absolutePath, ConflictPolicy.SKIP),
+        )
+
+        assertEquals("old", File(out, "a.txt").readText())
+        assertEquals(1, result.skipped.size)
+    }
+
+    @Test
+    fun `unzip rename keeps existing and writes sibling`() {
+        val zip = makeZip("rename.zip", "new")
+        val out = temp.newFolder("rename-out")
+        write(File(out, "a.txt"), "old")
+
+        val result = collect(
+            operator.unzip(zip.absolutePath, out.absolutePath, ConflictPolicy.RENAME),
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals("old", File(out, "a.txt").readText())
+        assertEquals("new", File(out, "a (1).txt").readText())
+    }
+
+    @Test
+    fun `unzip replace overwrites existing target`() {
+        val zip = makeZip("replace.zip", "new")
+        val out = temp.newFolder("replace-out")
+        write(File(out, "a.txt"), "old")
+
+        collect(operator.unzip(zip.absolutePath, out.absolutePath, ConflictPolicy.REPLACE))
+
+        assertEquals("new", File(out, "a.txt").readText())
+    }
+
+    @Test
+    fun `find zip conflicts detects existing entry`() {
+        val zip = makeZip("conflict.zip", "new")
+        val out = temp.newFolder("conflict-out")
+        write(File(out, "a.txt"), "old")
+
+        val conflicts = runBlocking {
+            operator.findZipConflicts(zip.absolutePath, out.absolutePath)
+        }
+
+        assertEquals(1, conflicts.size)
+        assertEquals("a.txt", conflicts.first().sourcePath)
+        assertTrue(conflicts.first().targetPath.endsWith("a.txt"))
+    }
 }
