@@ -4,7 +4,9 @@ import androidx.compose.ui.graphics.RectangleShape
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -264,7 +266,36 @@ private fun SettingSwitchRow(
             }
         }
         Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        RectSwitch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/** 项目全局直角风格：不用 Material 的胶囊开关。 */
+@Composable
+private fun RectSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val track = if (checked) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val thumb = if (checked) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+    Box(
+        modifier = Modifier
+            .size(width = 44.dp, height = 24.dp)
+            .background(track)
+            .clickable { onCheckedChange(!checked) }
+            .padding(2.dp),
+        contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .background(thumb),
+        )
     }
 }
 

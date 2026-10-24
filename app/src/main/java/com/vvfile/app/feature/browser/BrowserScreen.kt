@@ -188,6 +188,7 @@ fun BrowserScreen(
         drawerState = drawerState,
         drawerContent = {
             DrawerContent(state) { tool ->
+                scope.launch { drawerState.close() }
                 if (onToolClick != null) {
                     onToolClick(tool)
                 } else {
