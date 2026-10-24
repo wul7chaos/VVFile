@@ -16,6 +16,7 @@
     <string name="settings_theme_dark">深色</string>
     <string name="settings_theme_light">浅色</string>
     <string name="settings_theme_black">纯黑</string>
+    <string name="settings_accent">强调色</string>
 
     <!-- 浏览 -->
     <string name="settings_dual_pane">双窗格</string>

@@ -46,6 +46,8 @@ class SettingsViewModel(
 
     fun setDetailedList(enabled: Boolean) = write { repository.setDetailedList(enabled) }
 
+    fun setAccentIndex(index: Int) = write { repository.setAccentIndex(index) }
+
     fun setSort(spec: SortSpec) = write { repository.setSort(spec) }
 
     fun setSortField(field: SortField) = write { repository.setSortField(field) }

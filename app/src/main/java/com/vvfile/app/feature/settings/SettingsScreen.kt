@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -63,6 +64,7 @@ import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 import com.vvfile.app.data.prefs.Settings
 import com.vvfile.app.data.prefs.ThemeMode
+import com.vvfile.app.ui.theme.AccentPresets
 import com.vvfile.app.ui.theme.VVFileTheme
 
 /**
@@ -91,6 +93,7 @@ fun SettingsScreen(
         settings = settings,
         onClose = onClose,
         onThemeChange = viewModel::setTheme,
+        onAccentChange = viewModel::setAccentIndex,
         onDualPaneChange = viewModel::setDualPane,
         onShowHiddenChange = viewModel::setShowHidden,
         onDetailedListChange = viewModel::setDetailedList,
@@ -107,6 +110,7 @@ internal fun SettingsContent(
     settings: Settings,
     onClose: () -> Unit,
     onThemeChange: (ThemeMode) -> Unit,
+    onAccentChange: (Int) -> Unit = {},
     onDualPaneChange: (Boolean) -> Unit,
     onShowHiddenChange: (Boolean) -> Unit,
     onDetailedListChange: (Boolean) -> Unit = {},
@@ -135,7 +139,12 @@ internal fun SettingsContent(
                 title = stringResource(R.string.settings_group_appearance),
                 icon = Icons.Outlined.Palette,
             ) {
-                ThemeSetting(theme = settings.theme, onThemeChange = onThemeChange)
+                ThemeSetting(
+                    theme = settings.theme,
+                    onThemeChange = onThemeChange,
+                    accentIndex = settings.accentIndex,
+                    onAccentChange = onAccentChange,
+                )
             }
 
             SettingsSection(
@@ -318,7 +327,12 @@ private fun RectSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun ThemeSetting(theme: ThemeMode, onThemeChange: (ThemeMode) -> Unit) {
+private fun ThemeSetting(
+    theme: ThemeMode,
+    onThemeChange: (ThemeMode) -> Unit,
+    accentIndex: Int,
+    onAccentChange: (Int) -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
         Text(
             text = stringResource(R.string.settings_theme),
@@ -341,6 +355,31 @@ private fun ThemeSetting(theme: ThemeMode, onThemeChange: (ThemeMode) -> Unit) {
                     onClick = { onThemeChange(mode) },
                     label = { Text(themeLabel(mode), style = MaterialTheme.typography.labelMedium) },
                     leadingIcon = checkIcon(selected = mode == theme),
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.settings_accent),
+            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 14.sp, lineHeight = 19.sp),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AccentPresets.forEachIndexed { index, color ->
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .background(color)
+                        .border(
+                            width = if (index == accentIndex) 3.dp else 1.dp,
+                            color = if (index == accentIndex) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.outline
+                            },
+                        )
+                        .clickable { onAccentChange(index) },
                 )
             }
         }

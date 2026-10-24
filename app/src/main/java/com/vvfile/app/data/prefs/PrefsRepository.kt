@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.vvfile.app.data.model.SortField
@@ -56,6 +57,8 @@ class PrefsRepository private constructor(
 
     suspend fun setDetailedList(enabled: Boolean) = update { it.copy(detailedList = enabled) }
 
+    suspend fun setAccentIndex(index: Int) = update { it.copy(accentIndex = index.coerceAtLeast(0)) }
+
     suspend fun setSort(spec: SortSpec) = update { it.copy(sort = spec) }
 
     suspend fun setSortField(field: SortField) = update { current ->
@@ -88,6 +91,7 @@ private object PrefKeys {
     val DUAL_PANE = booleanPreferencesKey("dual_pane")
     val SHOW_HIDDEN = booleanPreferencesKey("show_hidden")
     val DETAILED_LIST = booleanPreferencesKey("detailed_list")
+    val ACCENT_INDEX = intPreferencesKey("accent_index")
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_ASCENDING = booleanPreferencesKey("sort_ascending")
     val START_PATH = stringPreferencesKey("start_path")
@@ -98,6 +102,7 @@ private fun Preferences.toSettings(): Settings = Settings.fromStorage(
     dualPane = this[PrefKeys.DUAL_PANE],
     showHidden = this[PrefKeys.SHOW_HIDDEN],
     detailedList = this[PrefKeys.DETAILED_LIST],
+    accentIndex = this[PrefKeys.ACCENT_INDEX],
     sortFieldKey = this[PrefKeys.SORT_FIELD],
     sortAscending = this[PrefKeys.SORT_ASCENDING],
     startPath = this[PrefKeys.START_PATH],
@@ -108,6 +113,7 @@ private fun MutablePreferences.write(settings: Settings) {
     this[PrefKeys.DUAL_PANE] = settings.dualPane
     this[PrefKeys.SHOW_HIDDEN] = settings.showHidden
     this[PrefKeys.DETAILED_LIST] = settings.detailedList
+    this[PrefKeys.ACCENT_INDEX] = settings.accentIndex
     this[PrefKeys.SORT_FIELD] = Settings.sortFieldKey(settings.sort.field)
     this[PrefKeys.SORT_ASCENDING] = settings.sort.ascending
     val startPath = Settings.normalizeStartPath(settings.startPath)

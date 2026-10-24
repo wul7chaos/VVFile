@@ -213,8 +213,9 @@ private fun iconFor(entry: FileEntry): ImageVector = when {
     else -> Icons.AutoMirrored.Outlined.InsertDriveFile
 }
 
+@Composable
 private fun tintFor(entry: FileEntry): Color = when {
-    entry.isDirectory -> Color(0xFF8B7DFF)
+    entry.isDirectory -> MaterialTheme.colorScheme.primary
     entry.extension in imageExt -> FileTintImage
     entry.extension in videoExt -> FileTintVideo
     entry.extension in audioExt -> FileTintAudio

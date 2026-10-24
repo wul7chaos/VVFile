@@ -52,13 +52,24 @@ private val RectShapes = Shapes(
     extraLarge = RectShape,
 )
 
+/** 强调色预设；索引持久化在设置里，0 为默认靛蓝。 */
+val AccentPresets: List<Color> = listOf(
+    Color(0xFF5B5BF0),
+    Color(0xFF0E9F6E),
+    Color(0xFF2F80ED),
+    Color(0xFFE05A2B),
+    Color(0xFFD6409F),
+    Color(0xFFB08900),
+)
+
 @Composable
 fun VVFileTheme(
     darkTheme: Boolean = true,
     pureBlack: Boolean = false,
+    accent: Color? = null,
     content: @Composable () -> Unit,
 ) {
-    val scheme = when {
+    val base = when {
         !darkTheme -> LightColors
         pureBlack -> DarkColors.copy(
             background = Color.Black,
@@ -66,6 +77,16 @@ fun VVFileTheme(
             surfaceVariant = Color(0xFF101010),
         )
         else -> DarkColors
+    }
+    val scheme = if (accent == null) {
+        base
+    } else {
+        base.copy(
+            primary = accent,
+            onPrimary = Color.White,
+            primaryContainer = accent.copy(alpha = 0.28f),
+            onPrimaryContainer = if (darkTheme) Color.White else Color(0xFF111111),
+        )
     }
     MaterialTheme(
         colorScheme = scheme,

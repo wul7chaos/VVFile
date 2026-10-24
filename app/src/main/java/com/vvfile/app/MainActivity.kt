@@ -30,6 +30,7 @@ import com.vvfile.app.feature.browser.BrowserScreen
 import com.vvfile.app.feature.editor.EditorScreen
 import com.vvfile.app.feature.settings.SettingsScreen
 import com.vvfile.app.feature.terminal.TerminalScreen
+import com.vvfile.app.ui.theme.AccentPresets
 import com.vvfile.app.ui.theme.VVFileTheme
 
 class MainActivity : ComponentActivity() {
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
             VVFileTheme(
                 darkTheme = darkTheme,
                 pureBlack = settings.theme == ThemeMode.BLACK,
+                accent = AccentPresets.getOrNull(settings.accentIndex),
             ) {
                 var editingPath by remember { mutableStateOf<String?>(null) }
                 var showSettings by remember { mutableStateOf(false) }

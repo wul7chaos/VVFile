@@ -18,6 +18,8 @@ data class Settings(
     val showHidden: Boolean = false,
     /** 列表第二行显示权限/所有者，而不是大小/时间。 */
     val detailedList: Boolean = false,
+    /** 强调色预设索引，见 AccentPresets。 */
+    val accentIndex: Int = 0,
     val sort: SortSpec = SortSpec(),
     val startPath: String? = null,
 ) {
@@ -46,11 +48,13 @@ data class Settings(
             sortAscending: Boolean?,
             startPath: String?,
             detailedList: Boolean? = null,
+            accentIndex: Int? = null,
         ): Settings = Settings(
             theme = themeFromKey(themeKey),
             dualPane = dualPane ?: DEFAULT.dualPane,
             showHidden = showHidden ?: DEFAULT.showHidden,
             detailedList = detailedList ?: DEFAULT.detailedList,
+            accentIndex = accentIndex ?: DEFAULT.accentIndex,
             sort = SortSpec(
                 field = sortFieldFromKey(sortFieldKey),
                 ascending = sortAscending ?: DEFAULT.sort.ascending,
