@@ -25,7 +25,11 @@ interface FileOperator {
 
     fun delete(paths: List<String>): Flow<OperationEvent>
 
-    fun zip(sources: List<String>, targetZip: String): Flow<OperationEvent>
+    fun zip(
+        sources: List<String>,
+        targetZip: String,
+        level: Int = java.util.zip.Deflater.DEFAULT_COMPRESSION,
+    ): Flow<OperationEvent>
 
     fun unzip(
         zipPath: String,

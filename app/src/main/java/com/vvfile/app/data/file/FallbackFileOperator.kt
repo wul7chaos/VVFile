@@ -45,11 +45,15 @@ class FallbackFileOperator(
     override fun delete(paths: List<String>): Flow<OperationEvent> =
         if (useRoot(*paths.toTypedArray())) root.delete(paths) else local.delete(paths)
 
-    override fun zip(sources: List<String>, targetZip: String): Flow<OperationEvent> =
+    override fun zip(
+        sources: List<String>,
+        targetZip: String,
+        level: Int,
+    ): Flow<OperationEvent> =
         if (useRoot(targetZip, *sources.toTypedArray())) {
-            root.zip(sources, targetZip)
+            root.zip(sources, targetZip, level)
         } else {
-            local.zip(sources, targetZip)
+            local.zip(sources, targetZip, level)
         }
 
     override fun unzip(

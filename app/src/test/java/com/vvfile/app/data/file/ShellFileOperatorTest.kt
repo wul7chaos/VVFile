@@ -99,7 +99,7 @@ class ShellFileOperatorTest {
     @Test
     fun `root 分区压缩返回失败而不是崩溃`() {
         val operator = ShellFileOperator(FakeRunner { ok(it) })
-        val result = collect(operator.zip(listOf("/system/a"), "/system/a.zip"))
+        val result = collect(operator.zip(listOf("/system/a"), "/system/a.zip", 6))
         assertFalse(result.isSuccess)
         assertTrue(result.failures.single().reason.contains("不支持"))
     }

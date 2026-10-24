@@ -65,8 +65,12 @@ class LocalFileOperator(
         emit(OperationEvent.Finished(result))
     }.flowOn(io)
 
-    override fun zip(sources: List<String>, targetZip: String): Flow<OperationEvent> = flow {
-        val result = runZip(sources, targetZip) { emit(OperationEvent.Progress(it)) }
+    override fun zip(
+        sources: List<String>,
+        targetZip: String,
+        level: Int,
+    ): Flow<OperationEvent> = flow {
+        val result = runZip(sources, targetZip, level) { emit(OperationEvent.Progress(it)) }
         emit(OperationEvent.Finished(result))
     }.flowOn(io)
 
@@ -456,6 +460,7 @@ class LocalFileOperator(
     private suspend fun runZip(
         sources: List<String>,
         targetZip: String,
+        level: Int,
         report: suspend (OperationProgress) -> Unit,
     ): OperationResult {
         val failures = mutableListOf<OperationFailure>()
@@ -493,6 +498,7 @@ class LocalFileOperator(
         target.parent?.let { Files.createDirectories(it) }
         try {
             ZipOutputStream(BufferedOutputStream(Files.newOutputStream(target))).use { zip ->
+                zip.setLevel(level)
                 for ((file, entryName) in entries) {
                     coroutineContext.ensureActive()
                     val entry = ZipEntry(entryName)

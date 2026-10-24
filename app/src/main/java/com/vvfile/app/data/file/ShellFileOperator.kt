@@ -68,7 +68,11 @@ class ShellFileOperator(
         emit(OperationEvent.Finished(OperationResult(succeeded, failures = failures)))
     }.flowOn(io)
 
-    override fun zip(sources: List<String>, targetZip: String): Flow<OperationEvent> =
+    override fun zip(
+        sources: List<String>,
+        targetZip: String,
+        level: Int,
+    ): Flow<OperationEvent> =
         unsupportedFlow(targetZip, "root 分区暂不支持压缩")
 
     override fun unzip(

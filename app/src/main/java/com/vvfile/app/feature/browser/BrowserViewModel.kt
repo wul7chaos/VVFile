@@ -256,7 +256,7 @@ class BrowserViewModel : ViewModel() {
 
     fun createFile(name: String) = createEntry(name, directory = false)
 
-    fun zipSelection(zipName: String) {
+    fun zipSelection(zipName: String, level: Int = 6) {
         if (isBusy()) return notifyBusy()
         val pane = activePaneState()
         val sources = selectedPaths(pane)
@@ -268,7 +268,7 @@ class BrowserViewModel : ViewModel() {
         if (File(targetZip).exists()) {
             return postMessage(UiMessage.Simple(R.string.ui_ops_zip_exists))
         }
-        startFlow(OperationKind.ZIP) { operator.zip(sources, targetZip) }
+        startFlow(OperationKind.ZIP) { operator.zip(sources, targetZip, level) }
     }
 
     fun unzipSelection(targetDir: String? = null) {

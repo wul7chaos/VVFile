@@ -13,6 +13,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 class LocalFileOperatorTest {
@@ -135,7 +136,7 @@ class LocalFileOperatorTest {
         write(File(dir, "sub/b.txt"), "beta")
         val zip = File(temp.root, "out.zip")
 
-        val zipResult = collect(operator.zip(listOf(dir.absolutePath), zip.absolutePath))
+        val zipResult = collect(operator.zip(listOf(dir.absolutePath), zip.absolutePath, 6))
         assertTrue(zipResult.isSuccess)
         assertTrue(zip.exists())
 
@@ -239,5 +240,19 @@ class LocalFileOperatorTest {
         assertEquals(1, conflicts.size)
         assertEquals("a.txt", conflicts.first().sourcePath)
         assertTrue(conflicts.first().targetPath.endsWith("a.txt"))
+    }
+
+    @Test
+    fun `zip level 0 compresses less than level 9`() = runBlocking {
+        val source = temp.newFile("stored.txt").apply { writeText("hello world\n".repeat(2000)) }
+        val storedZip = File(temp.root, "stored.zip")
+        val maxZip = File(temp.root, "max.zip")
+
+        assertTrue(collect(operator.zip(listOf(source.absolutePath), storedZip.absolutePath, 0)).isSuccess)
+        assertTrue(collect(operator.zip(listOf(source.absolutePath), maxZip.absolutePath, 9)).isSuccess)
+
+        val storedSize = ZipFile(storedZip).use { it.getEntry("stored.txt")!!.compressedSize }
+        val maxSize = ZipFile(maxZip).use { it.getEntry("stored.txt")!!.compressedSize }
+        assertTrue("stored=$storedSize max=$maxSize", storedSize > maxSize)
     }
 }

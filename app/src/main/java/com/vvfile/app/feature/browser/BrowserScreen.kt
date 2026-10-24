@@ -62,6 +62,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -435,13 +436,13 @@ fun BrowserScreen(
         NameInputDialog(
             state = dialog,
             onDismiss = { nameDialog = null },
-            onConfirm = { name ->
+            onConfirm = { name, level ->
                 nameDialog = null
                 when (dialog.mode) {
                     NameDialogMode.RENAME -> viewModel.renameSelection(name)
                     NameDialogMode.NEW_FOLDER -> viewModel.createFolder(name)
                     NameDialogMode.NEW_FILE -> viewModel.createFile(name)
-                    NameDialogMode.ZIP -> viewModel.zipSelection(name)
+                    NameDialogMode.ZIP -> viewModel.zipSelection(name, level)
                 }
             },
         )
@@ -1373,9 +1374,10 @@ private fun DeleteConfirmDialog(
 private fun NameInputDialog(
     state: NameDialogState,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
+    onConfirm: (String, Int) -> Unit,
 ) {
     var name by remember(state) { mutableStateOf(state.initialName) }
+    var level by remember(state) { mutableStateOf(6) }
     val candidate = name.trim()
     val error = remember(candidate) {
         if (candidate.isEmpty()) {
@@ -1389,22 +1391,50 @@ private fun NameInputDialog(
         onDismissRequest = onDismiss,
         title = { Text(nameDialogTitle(state.mode)) },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                singleLine = true,
-                label = { Text(stringResource(R.string.ui_ops_name_label)) },
-                isError = error != null,
-                supportingText = if (error != null) {
-                    { Text(error) }
-                } else {
-                    null
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.ui_ops_name_label)) },
+                    isError = error != null,
+                    supportingText = if (error != null) {
+                        { Text(error) }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (state.mode == NameDialogMode.ZIP) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(R.string.ui_ops_zip_level),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            0 to R.string.ui_ops_zip_level_store,
+                            6 to R.string.ui_ops_zip_level_normal,
+                            9 to R.string.ui_ops_zip_level_max,
+                        ).forEach { (value, label) ->
+                            FilterChip(
+                                selected = level == value,
+                                onClick = { level = value },
+                                label = {
+                                    Text(
+                                        stringResource(label),
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(candidate) }, enabled = canConfirm) {
+            TextButton(onClick = { onConfirm(candidate, level) }, enabled = canConfirm) {
                 Text(stringResource(R.string.ui_ops_ok))
             }
         },

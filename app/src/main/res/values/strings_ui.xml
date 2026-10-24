@@ -53,6 +53,10 @@
     <string name="ui_ops_new_file_title">新建文件</string>
     <string name="ui_ops_zip_dialog_title">压缩为 ZIP</string>
     <string name="ui_ops_name_label">名称</string>
+    <string name="ui_ops_zip_level">压缩级别</string>
+    <string name="ui_ops_zip_level_store">存储</string>
+    <string name="ui_ops_zip_level_normal">标准</string>
+    <string name="ui_ops_zip_level_max">最大</string>
     <string name="ui_ops_cancel">取消</string>
     <string name="ui_ops_ok">确定</string>
     <string name="ui_action_unzip">解压</string>
