@@ -14,6 +14,10 @@
     <string name="ui_unzip_to_title">解压到指定目录</string>
     <string name="ui_unzip_to_path">目标目录</string>
     <string name="ui_unzip_to_confirm">解压</string>
+    <string name="ui_chmod_title">修改权限</string>
+    <string name="ui_chmod_mode">权限（如 755）</string>
+    <string name="ui_chmod_apply">应用</string>
+    <string name="ui_ops_chmod_success">权限已更新</string>
     <string name="ui_action_share">分享</string>
     <string name="ui_action_properties">属性</string>
     <string name="ui_filter_title">过滤</string>

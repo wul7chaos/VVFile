@@ -39,6 +39,9 @@ interface FileOperator {
 
     suspend fun createFile(parent: String, name: String): OperationResult
 
+    /** 修改权限；[mode] 支持 "755" 或 "rwxr-xr-x"。 */
+    suspend fun chmod(path: String, mode: String): OperationResult
+
     /** 列出会在目标目录发生冲突的源；UI 据此弹出覆盖/跳过/重命名选择。 */
     suspend fun findConflicts(sources: List<String>, targetDir: String): List<ConflictInfo>
 

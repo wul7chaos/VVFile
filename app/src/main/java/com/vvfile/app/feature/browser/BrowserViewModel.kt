@@ -329,6 +329,31 @@ class BrowserViewModel : ViewModel() {
         _state.update { if (it.message == null) it else it.copy(message = null) }
     }
 
+    fun changePermissions(path: String, mode: String) {
+        if (isBusy()) return notifyBusy()
+        viewModelScope.launch {
+            try {
+                val result = operator.chmod(path, mode)
+                if (result.isSuccess) {
+                    postMessage(UiMessage.Simple(R.string.ui_ops_chmod_success))
+                    afterOperation()
+                } else {
+                    postMessage(
+                        UiMessage.Result(
+                            0,
+                            1,
+                            0,
+                            false,
+                            result.failures.firstOrNull()?.reason ?: "修改权限失败",
+                        ),
+                    )
+                }
+            } catch (error: Exception) {
+                postMessage(UiMessage.Result(0, 1, 0, false, error.message ?: "修改权限失败"))
+            }
+        }
+    }
+
     private fun startTransfer(kind: OperationKind) {
         if (isBusy()) return notifyBusy()
         val s = _state.value

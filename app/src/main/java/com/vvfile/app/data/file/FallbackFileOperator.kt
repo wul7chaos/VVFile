@@ -82,6 +82,9 @@ class FallbackFileOperator(
             local.findConflicts(sources, targetDir)
         }
 
+    override suspend fun chmod(path: String, mode: String): OperationResult =
+        if (useRoot(path)) root.chmod(path, mode) else local.chmod(path, mode)
+
     override suspend fun findZipConflicts(
         zipPath: String,
         targetDir: String,

@@ -28,6 +28,7 @@ import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.PosixFilePermission
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -108,6 +109,73 @@ class LocalFileOperator(
             Files.createFile(target)
             listOf(target.toString())
         }
+    }
+
+    override suspend fun chmod(path: String, mode: String): OperationResult = withContext(io) {
+        runSimple {
+            val target = Paths.get(path)
+            if (!Files.exists(target)) throw IOException("文件不存在")
+            Files.setPosixFilePermissions(target, parsePermissions(mode))
+            listOf(path)
+        }
+    }
+
+    private fun parsePermissions(mode: String): Set<PosixFilePermission> {
+        val trimmed = mode.trim()
+        if (Regex("[0-7]{3,4}").matches(trimmed)) {
+            val digits = trimmed.takeLast(3)
+            val result = mutableSetOf<PosixFilePermission>()
+            val classes = listOf(
+                listOf(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE,
+                    PosixFilePermission.OWNER_EXECUTE,
+                ),
+                listOf(
+                    PosixFilePermission.GROUP_READ,
+                    PosixFilePermission.GROUP_WRITE,
+                    PosixFilePermission.GROUP_EXECUTE,
+                ),
+                listOf(
+                    PosixFilePermission.OTHERS_READ,
+                    PosixFilePermission.OTHERS_WRITE,
+                    PosixFilePermission.OTHERS_EXECUTE,
+                ),
+            )
+            digits.forEachIndexed { index, char ->
+                val value = char.digitToInt()
+                if (value and 4 != 0) result += classes[index][0]
+                if (value and 2 != 0) result += classes[index][1]
+                if (value and 1 != 0) result += classes[index][2]
+            }
+            return result
+        }
+        if (!Regex("[r-][w-][x－-][r-][w-][x－-][r-][w-][x－-]").matches(trimmed)) {
+            throw IOException("权限格式应为 755 或 rwxr-xr-x")
+        }
+        val chars = trimmed.replace('－', '-')
+        val result = mutableSetOf<PosixFilePermission>()
+        val classes = listOf(
+            listOf(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.OWNER_EXECUTE,
+            ),
+            listOf(
+                PosixFilePermission.GROUP_READ,
+                PosixFilePermission.GROUP_WRITE,
+                PosixFilePermission.GROUP_EXECUTE,
+            ),
+            listOf(
+                PosixFilePermission.OTHERS_READ,
+                PosixFilePermission.OTHERS_WRITE,
+                PosixFilePermission.OTHERS_EXECUTE,
+            ),
+        )
+        for (index in 0 until 9) {
+            if (chars[index] != '-') result += classes[index / 3][index % 3]
+        }
+        return result
     }
 
     override suspend fun findConflicts(

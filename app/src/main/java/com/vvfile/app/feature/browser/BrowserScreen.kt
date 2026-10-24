@@ -129,6 +129,7 @@ fun BrowserScreen(
     var properties by remember { mutableStateOf<FileProperties?>(null) }
     var showFilter by remember { mutableStateOf(false) }
     var showUnzipTo by remember { mutableStateOf(false) }
+    var chmodTarget by remember { mutableStateOf<FileProperties?>(null) }
 
     // 每个窗格一份滚动状态；路径变化时回到顶部（requestScrollToItem 在列表尚未布局时也生效）
     val leftListState = rememberLazyListState()
@@ -363,7 +364,25 @@ fun BrowserScreen(
     }
 
     properties?.let { info ->
-        PropertiesDialog(properties = info, onDismiss = { properties = null })
+        PropertiesDialog(
+            properties = info,
+            onDismiss = { properties = null },
+            onChangePermissions = {
+                properties = null
+                chmodTarget = info
+            },
+        )
+    }
+
+    chmodTarget?.let { info ->
+        ChmodDialog(
+            properties = info,
+            onConfirm = { mode ->
+                chmodTarget = null
+                viewModel.changePermissions(info.path, mode)
+            },
+            onDismiss = { chmodTarget = null },
+        )
     }
 
     if (showUnzipTo) {
@@ -1085,7 +1104,11 @@ private fun FilterDialog(
 }
 
 @Composable
-private fun PropertiesDialog(properties: FileProperties, onDismiss: () -> Unit) {
+private fun PropertiesDialog(
+    properties: FileProperties,
+    onDismiss: () -> Unit,
+    onChangePermissions: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1113,9 +1136,69 @@ private fun PropertiesDialog(properties: FileProperties, onDismiss: () -> Unit) 
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            Row {
+                TextButton(onClick = onChangePermissions) {
+                    Text(stringResource(R.string.ui_chmod_title))
+                }
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
         },
     )
+}
+
+@Composable
+private fun ChmodDialog(
+    properties: FileProperties,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var mode by remember {
+        mutableStateOf(octalFromSymbolic(properties.permissions))
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ui_chmod_title)) },
+        text = {
+            Column {
+                Text(
+                    text = properties.path,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = mode,
+                    onValueChange = { mode = it },
+                    label = { Text(stringResource(R.string.ui_chmod_mode)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(mode.trim()) }) {
+                Text(stringResource(R.string.ui_chmod_apply))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.ui_filter_cancel))
+            }
+        },
+    )
+}
+
+private fun octalFromSymbolic(permissions: String): String {
+    if (permissions.length != 9) return "644"
+    return permissions.chunked(3).joinToString("") { group ->
+        var value = 0
+        if (group[0] == 'r') value += 4
+        if (group[1] == 'w') value += 2
+        if (group[2] == 'x') value += 1
+        value.toString()
+    }
 }
 
 @Composable

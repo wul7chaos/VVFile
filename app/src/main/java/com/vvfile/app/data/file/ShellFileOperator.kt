@@ -113,6 +113,19 @@ class ShellFileOperator(
             else failure(target, result.errorText())
         }
 
+    override suspend fun chmod(path: String, mode: String): OperationResult = withContext(io) {
+        val trimmed = mode.trim()
+        if (!Regex("[0-7]{3,4}").matches(trimmed)) {
+            return@withContext failure(path, "权限格式应为 755")
+        }
+        val result = run("chmod $trimmed ${quote(path)}", TIMEOUT_MS)
+        if (result.isSuccess) {
+            OperationResult(succeeded = listOf(path))
+        } else {
+            failure(path, result.errorText())
+        }
+    }
+
     override suspend fun findConflicts(
         sources: List<String>,
         targetDir: String,
