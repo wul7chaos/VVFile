@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
  */
 class ShellExecutor(
     private val maxOutputBytes: Int = DEFAULT_MAX_OUTPUT_BYTES,
-) {
+) : CommandRunner {
     init {
         require(maxOutputBytes > 0) { "maxOutputBytes must be positive" }
     }
@@ -38,10 +38,10 @@ class ShellExecutor(
      * @param asRoot true 使用 `su -c`，false 使用 `sh -c`。
      * @param timeoutMs 超时毫秒数，非正值按 1 ms 处理。
      */
-    suspend fun exec(
+    override suspend fun exec(
         command: String,
-        asRoot: Boolean = false,
-        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+        asRoot: Boolean,
+        timeoutMs: Long,
     ): ShellResult = withContext(Dispatchers.IO) {
         val argv = if (asRoot) {
             arrayOf(SU_BINARY, "-c", command)

@@ -5,9 +5,11 @@ import com.vvfile.app.core.io.FallbackFileSystem
 import com.vvfile.app.core.io.NioFileSystem
 import com.vvfile.app.core.io.ShellFileSystem
 import com.vvfile.app.core.shell.RootManager
+import com.vvfile.app.data.file.FallbackFileOperator
 import com.vvfile.app.data.file.FileOperator
 import com.vvfile.app.data.file.FileRepository
 import com.vvfile.app.data.file.LocalFileOperator
+import com.vvfile.app.data.file.ShellFileOperator
 
 class VVFileApp : Application() {
     override fun onCreate() {
@@ -35,7 +37,11 @@ object ServiceLocator {
             )
         }
         if (!::fileOperator.isInitialized) {
-            fileOperator = LocalFileOperator()
+            fileOperator = FallbackFileOperator(
+                local = LocalFileOperator(),
+                root = ShellFileOperator(),
+                rootAvailable = RootManager::isAvailable,
+            )
         }
     }
 }
