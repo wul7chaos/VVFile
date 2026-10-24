@@ -16,10 +16,31 @@ data class PaneState(
     val error: String? = null,
     /** 已选条目的绝对路径集合；非空即处于选择态。 */
     val selected: Set<String> = emptySet(),
+    /** 关键字过滤（名称，忽略大小写）。 */
+    val filterQuery: String = "",
+    /** 扩展名过滤，逗号/空格分隔；空表示不过滤。 */
+    val filterExtensions: String = "",
 ) {
     val canGoBack: Boolean get() = historyIndex > 0
     val canGoForward: Boolean get() = historyIndex in 0 until history.lastIndex
     val selectionMode: Boolean get() = selected.isNotEmpty()
+    val filterActive: Boolean get() = filterQuery.isNotBlank() || filterExtensions.isNotBlank()
+
+    /** 过滤后的可见条目；过滤不改变 entries，避免影响选择与操作语义。 */
+    val visibleEntries: List<FileEntry>
+        get() {
+            if (!filterActive) return entries
+            val keyword = filterQuery.trim()
+            val extensions = filterExtensions
+                .split(',', ' ', '，')
+                .map { it.trim().removePrefix(".").lowercase() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+            return entries.filter { entry ->
+                (keyword.isEmpty() || entry.name.contains(keyword, ignoreCase = true)) &&
+                    (extensions.isEmpty() || entry.extension in extensions)
+            }
+        }
 }
 
 data class BrowserUiState(

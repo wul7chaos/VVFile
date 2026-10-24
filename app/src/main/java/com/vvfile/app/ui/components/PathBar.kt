@@ -1,8 +1,11 @@
 package com.vvfile.app.ui.components
+
+import android.widget.Toast
 import androidx.compose.ui.graphics.RectangleShape
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -26,6 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +52,8 @@ fun PathBar(
 ) {
     val segments = remember(path) { buildSegments(path) }
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     LaunchedEffect(path) {
         // 持续跟随可滚动余量变化：布局完成后再滚到尾部，保证当前目录完整可见
         snapshotFlow { scrollState.maxValue }.collect { max ->
@@ -52,7 +61,14 @@ fun PathBar(
         }
     }
     Row(
-        modifier = modifier,
+        modifier = modifier.pointerInput(path) {
+            detectTapGestures(
+                onLongPress = {
+                    clipboard.setText(AnnotatedString(path))
+                    Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
+                },
+            )
+        },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 根入口不参与滚动，任何深度下都能一键回 "/"

@@ -12,6 +12,12 @@
     <string name="ui_action_compress">压缩</string>
     <string name="ui_action_share">分享</string>
     <string name="ui_action_properties">属性</string>
+    <string name="ui_filter_title">过滤</string>
+    <string name="ui_filter_query">名称关键字</string>
+    <string name="ui_filter_extensions">扩展名（逗号分隔）</string>
+    <string name="ui_filter_apply">应用</string>
+    <string name="ui_filter_clear">清除</string>
+    <string name="ui_filter_cancel">取消</string>
 
     <!-- 文件操作在 M2 接入，当前仅提示 -->
     <string name="ui_action_m2_placeholder">M2 实现</string>

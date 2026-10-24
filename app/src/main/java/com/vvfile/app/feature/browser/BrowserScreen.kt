@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -126,6 +127,7 @@ fun BrowserScreen(
     var hasPermission by remember { mutableStateOf(hasStoragePermission(context)) }
     var showAbout by remember { mutableStateOf(false) }
     var properties by remember { mutableStateOf<FileProperties?>(null) }
+    var showFilter by remember { mutableStateOf(false) }
 
     // 每个窗格一份滚动状态；路径变化时回到顶部（requestScrollToItem 在列表尚未布局时也生效）
     val leftListState = rememberLazyListState()
@@ -135,6 +137,13 @@ fun BrowserScreen(
     // 排序变化后两窗格都回到顶部，避免新排序下首行被裁成半截
     LaunchedEffect(state.sort) {
         leftListState.requestScrollToItem(0)
+        rightListState.requestScrollToItem(0)
+    }
+    // 过滤条件变化后回到顶部，避免沿用旧索引显示到列表中部
+    LaunchedEffect(state.left.filterQuery, state.left.filterExtensions) {
+        leftListState.requestScrollToItem(0)
+    }
+    LaunchedEffect(state.right.filterQuery, state.right.filterExtensions) {
         rightListState.requestScrollToItem(0)
     }
 
@@ -234,6 +243,7 @@ fun BrowserScreen(
                 sort = state.sort,
                 onNavigate = { path -> viewModel.navigate(state.active, path) },
                 onSort = viewModel::setSort,
+                onFilter = { showFilter = true },
                 onRefresh = { viewModel.refresh(state.active) },
             )
 
@@ -350,6 +360,22 @@ fun BrowserScreen(
 
     properties?.let { info ->
         PropertiesDialog(properties = info, onDismiss = { properties = null })
+    }
+
+    if (showFilter) {
+        FilterDialog(
+            initialQuery = activePane.filterQuery,
+            initialExtensions = activePane.filterExtensions,
+            onApply = { query, extensions ->
+                viewModel.setFilter(state.active, query, extensions)
+                showFilter = false
+            },
+            onClear = {
+                viewModel.setFilter(state.active, "", "")
+                showFilter = false
+            },
+            onDismiss = { showFilter = false },
+        )
     }
 
     state.operation?.let { operation ->
@@ -581,6 +607,7 @@ private fun BrowserBreadcrumbBar(
     sort: SortSpec,
     onNavigate: (String) -> Unit,
     onSort: (SortField) -> Unit,
+    onFilter: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     var sortOpen by remember { mutableStateOf(false) }
@@ -598,9 +625,9 @@ private fun BrowserBreadcrumbBar(
         )
         Text(
             text = if (pane.selectionMode) {
-                "${pane.selected.size}/${pane.entries.size}"
+                "${pane.selected.size}/${pane.visibleEntries.size}"
             } else {
-                "${pane.entries.size}"
+                "${pane.visibleEntries.size}"
             },
             style = MaterialTheme.typography.labelMedium,
             color = if (pane.selectionMode) {
@@ -611,6 +638,20 @@ private fun BrowserBreadcrumbBar(
             maxLines = 1,
             modifier = Modifier.padding(start = 6.dp),
         )
+        Box {
+            IconButton(onClick = onFilter) {
+                Icon(
+                    imageVector = Icons.Outlined.FilterAlt,
+                    contentDescription = stringResource(R.string.ui_filter_title),
+                    tint = if (pane.filterActive) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
         Box {
             IconButton(onClick = { sortOpen = true }) {
                 Icon(
@@ -935,6 +976,56 @@ private data class NameDialogState(
     val mode: NameDialogMode,
     val initialName: String,
 )
+
+@Composable
+private fun FilterDialog(
+    initialQuery: String,
+    initialExtensions: String,
+    onApply: (String, String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var query by remember { mutableStateOf(initialQuery) }
+    var extensions by remember { mutableStateOf(initialExtensions) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ui_filter_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text(stringResource(R.string.ui_filter_query)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = extensions,
+                    onValueChange = { extensions = it },
+                    label = { Text(stringResource(R.string.ui_filter_extensions)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(query, extensions) }) {
+                Text(stringResource(R.string.ui_filter_apply))
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onClear) {
+                    Text(stringResource(R.string.ui_filter_clear))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.ui_filter_cancel))
+                }
+            }
+        },
+    )
+}
 
 @Composable
 private fun PropertiesDialog(properties: FileProperties, onDismiss: () -> Unit) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.vvfile.app.R
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.ui.components.FileRow
@@ -63,6 +65,7 @@ fun PaneContent(
     modifier: Modifier = Modifier,
 ) {
     val accent = MaterialTheme.colorScheme.primary
+    val visibleEntries = pane.visibleEntries
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -82,16 +85,41 @@ fun PaneContent(
                 .background(if (active) accent else Color.Transparent),
         )
 
+        if (pane.entries.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${visibleEntries.count { it.isDirectory }} 个文件夹 · " +
+                        "${visibleEntries.count { !it.isDirectory }} 个文件",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (pane.filterActive) {
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = "已过滤",
+                        fontSize = 10.sp,
+                        color = accent,
+                    )
+                }
+            }
+        }
+
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 pane.error != null -> ErrorState(pane.error, onRetry)
                 pane.loading && pane.entries.isEmpty() -> LoadingState()
                 pane.entries.isEmpty() -> EmptyState(onNewFolder)
+                visibleEntries.isEmpty() -> FilterEmptyState()
                 else -> LazyColumn(
                     state = listState,
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.dp),
                 ) {
-                    items(pane.entries, key = { it.path }) { entry ->
+                    items(visibleEntries, key = { it.path }) { entry ->
                         FileRow(
                             entry = entry,
                             isSelected = entry.path in pane.selected,
@@ -143,6 +171,17 @@ private fun LoadingState() {
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
             )
         }
+    }
+}
+
+@Composable
+private fun FilterEmptyState() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(
+            text = "没有匹配的条目",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

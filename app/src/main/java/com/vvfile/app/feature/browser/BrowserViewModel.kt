@@ -109,6 +109,18 @@ class BrowserViewModel : ViewModel() {
         refreshAll()
     }
 
+    /** 设置当前窗格的关键字/扩展名过滤；过滤变化时清空选择，避免操作到不可见条目。 */
+    fun setFilter(pane: PaneId, query: String, extensions: String) {
+        val target = if (_state.value.dualPane) pane else PaneId.LEFT
+        updatePane(target) {
+            it.copy(
+                filterQuery = query.trim(),
+                filterExtensions = extensions.trim(),
+                selected = emptySet(),
+            )
+        }
+    }
+
     fun setSort(field: SortField) {
         val current = _state.value
         val next = if (current.sort.field == field) {
