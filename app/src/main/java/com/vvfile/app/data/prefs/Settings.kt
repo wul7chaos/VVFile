@@ -20,6 +20,9 @@ data class Settings(
     val detailedList: Boolean = false,
     /** 强调色预设索引，见 AccentPresets。 */
     val accentIndex: Int = 0,
+    /** 终端与编辑器字号（sp）。 */
+    val terminalFontSize: Int = 13,
+    val editorFontSize: Int = 13,
     val sort: SortSpec = SortSpec(),
     val startPath: String? = null,
 ) {
@@ -49,12 +52,16 @@ data class Settings(
             startPath: String?,
             detailedList: Boolean? = null,
             accentIndex: Int? = null,
+            terminalFontSize: Int? = null,
+            editorFontSize: Int? = null,
         ): Settings = Settings(
             theme = themeFromKey(themeKey),
             dualPane = dualPane ?: DEFAULT.dualPane,
             showHidden = showHidden ?: DEFAULT.showHidden,
             detailedList = detailedList ?: DEFAULT.detailedList,
             accentIndex = accentIndex ?: DEFAULT.accentIndex,
+            terminalFontSize = (terminalFontSize ?: DEFAULT.terminalFontSize).coerceIn(10, 24),
+            editorFontSize = (editorFontSize ?: DEFAULT.editorFontSize).coerceIn(10, 24),
             sort = SortSpec(
                 field = sortFieldFromKey(sortFieldKey),
                 ascending = sortAscending ?: DEFAULT.sort.ascending,

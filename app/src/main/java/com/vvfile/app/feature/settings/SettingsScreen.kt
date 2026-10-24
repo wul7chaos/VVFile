@@ -94,6 +94,8 @@ fun SettingsScreen(
         onClose = onClose,
         onThemeChange = viewModel::setTheme,
         onAccentChange = viewModel::setAccentIndex,
+        onTerminalFontChange = viewModel::setTerminalFontSize,
+        onEditorFontChange = viewModel::setEditorFontSize,
         onDualPaneChange = viewModel::setDualPane,
         onShowHiddenChange = viewModel::setShowHidden,
         onDetailedListChange = viewModel::setDetailedList,
@@ -111,6 +113,8 @@ internal fun SettingsContent(
     onClose: () -> Unit,
     onThemeChange: (ThemeMode) -> Unit,
     onAccentChange: (Int) -> Unit = {},
+    onTerminalFontChange: (Int) -> Unit = {},
+    onEditorFontChange: (Int) -> Unit = {},
     onDualPaneChange: (Boolean) -> Unit,
     onShowHiddenChange: (Boolean) -> Unit,
     onDetailedListChange: (Boolean) -> Unit = {},
@@ -144,6 +148,18 @@ internal fun SettingsContent(
                     onThemeChange = onThemeChange,
                     accentIndex = settings.accentIndex,
                     onAccentChange = onAccentChange,
+                )
+                RowDivider()
+                FontSizeSetting(
+                    title = stringResource(R.string.settings_terminal_font),
+                    value = settings.terminalFontSize,
+                    onChange = onTerminalFontChange,
+                )
+                RowDivider()
+                FontSizeSetting(
+                    title = stringResource(R.string.settings_editor_font),
+                    value = settings.editorFontSize,
+                    onChange = onEditorFontChange,
                 )
             }
 
@@ -383,6 +399,36 @@ private fun ThemeSetting(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun FontSizeSetting(title: String, value: Int, onChange: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 14.sp, lineHeight = 19.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "${value}sp",
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = { onChange(value - 1) }, enabled = value > 10) { Text("−") }
+        Text(
+            text = "$value",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        TextButton(onClick = { onChange(value + 1) }, enabled = value < 24) { Text("+") }
     }
 }
 

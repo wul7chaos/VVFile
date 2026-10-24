@@ -59,6 +59,14 @@ class PrefsRepository private constructor(
 
     suspend fun setAccentIndex(index: Int) = update { it.copy(accentIndex = index.coerceAtLeast(0)) }
 
+    suspend fun setTerminalFontSize(size: Int) = update {
+        it.copy(terminalFontSize = size.coerceIn(10, 24))
+    }
+
+    suspend fun setEditorFontSize(size: Int) = update {
+        it.copy(editorFontSize = size.coerceIn(10, 24))
+    }
+
     suspend fun setSort(spec: SortSpec) = update { it.copy(sort = spec) }
 
     suspend fun setSortField(field: SortField) = update { current ->
@@ -92,6 +100,8 @@ private object PrefKeys {
     val SHOW_HIDDEN = booleanPreferencesKey("show_hidden")
     val DETAILED_LIST = booleanPreferencesKey("detailed_list")
     val ACCENT_INDEX = intPreferencesKey("accent_index")
+    val TERMINAL_FONT = intPreferencesKey("terminal_font_size")
+    val EDITOR_FONT = intPreferencesKey("editor_font_size")
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_ASCENDING = booleanPreferencesKey("sort_ascending")
     val START_PATH = stringPreferencesKey("start_path")
@@ -103,6 +113,8 @@ private fun Preferences.toSettings(): Settings = Settings.fromStorage(
     showHidden = this[PrefKeys.SHOW_HIDDEN],
     detailedList = this[PrefKeys.DETAILED_LIST],
     accentIndex = this[PrefKeys.ACCENT_INDEX],
+    terminalFontSize = this[PrefKeys.TERMINAL_FONT],
+    editorFontSize = this[PrefKeys.EDITOR_FONT],
     sortFieldKey = this[PrefKeys.SORT_FIELD],
     sortAscending = this[PrefKeys.SORT_ASCENDING],
     startPath = this[PrefKeys.START_PATH],
@@ -114,6 +126,8 @@ private fun MutablePreferences.write(settings: Settings) {
     this[PrefKeys.SHOW_HIDDEN] = settings.showHidden
     this[PrefKeys.DETAILED_LIST] = settings.detailedList
     this[PrefKeys.ACCENT_INDEX] = settings.accentIndex
+    this[PrefKeys.TERMINAL_FONT] = settings.terminalFontSize
+    this[PrefKeys.EDITOR_FONT] = settings.editorFontSize
     this[PrefKeys.SORT_FIELD] = Settings.sortFieldKey(settings.sort.field)
     this[PrefKeys.SORT_ASCENDING] = settings.sort.ascending
     val startPath = Settings.normalizeStartPath(settings.startPath)

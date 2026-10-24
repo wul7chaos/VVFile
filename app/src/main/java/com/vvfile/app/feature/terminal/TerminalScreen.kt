@@ -83,6 +83,7 @@ import com.vvfile.app.ui.theme.VVFileTheme
 fun TerminalScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    fontSizeSp: Float = 13f,
     viewModel: TerminalViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -116,6 +117,7 @@ fun TerminalScreen(
         onHistoryUp = { viewModel.historyUp()?.let { input = it } },
         onHistoryDown = { viewModel.historyDown()?.let { input = it } },
         onQuickCommand = { command -> if (state.running) viewModel.send(command) },
+        fontSizeSp = fontSizeSp,
         modifier = modifier,
     )
 }
@@ -134,7 +136,9 @@ internal fun TerminalContent(
     onHistoryDown: () -> Unit,
     onQuickCommand: (String) -> Unit,
     modifier: Modifier = Modifier,
+    fontSizeSp: Float = 13f,
 ) {
+    val textStyle = remember(fontSizeSp) { terminalTextStyle(fontSizeSp) }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -154,6 +158,7 @@ internal fun TerminalContent(
         }
         TerminalOutput(
             lines = state.lines,
+            textStyle = textStyle,
             modifier = Modifier.weight(1f),
         )
         QuickCommandBar(
@@ -165,6 +170,7 @@ internal fun TerminalContent(
             input = input,
             prompt = if (state.sessionType == TerminalSessionType.ROOT) "#" else "\$",
             running = state.running,
+            textStyle = textStyle,
             onInputChange = onInputChange,
             onSubmit = onSubmit,
             onHistoryUp = onHistoryUp,
@@ -238,6 +244,7 @@ private fun TerminalErrorBanner(message: String) {
 @Composable
 private fun TerminalOutput(
     lines: List<TerminalLine>,
+    textStyle: TextStyle,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -258,18 +265,18 @@ private fun TerminalOutput(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         ) {
             itemsIndexed(lines) { _, line ->
-                TerminalLineText(line)
+                TerminalLineText(line, textStyle)
             }
         }
     }
 }
 
 @Composable
-private fun TerminalLineText(line: TerminalLine) {
+private fun TerminalLineText(line: TerminalLine, textStyle: TextStyle) {
     val annotated = remember(line) { line.toAnnotatedString() }
     Text(
         text = if (annotated.text.isEmpty()) AnnotatedString(" ") else annotated,
-        style = TERMINAL_TEXT_STYLE,
+        style = textStyle,
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -313,6 +320,7 @@ private fun TerminalInputRow(
     input: String,
     prompt: String,
     running: Boolean,
+    textStyle: TextStyle,
     onInputChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onHistoryUp: () -> Unit,
@@ -327,7 +335,7 @@ private fun TerminalInputRow(
     ) {
         Text(
             text = prompt,
-            style = TERMINAL_TEXT_STYLE,
+            style = textStyle,
             color = TerminalGreen,
         )
         Spacer(Modifier.width(8.dp))
@@ -337,7 +345,7 @@ private fun TerminalInputRow(
             modifier = Modifier
                 .weight(1f)
                 .padding(vertical = 10.dp),
-            textStyle = TERMINAL_TEXT_STYLE,
+            textStyle = textStyle,
             singleLine = true,
             cursorBrush = SolidColor(TerminalGreen),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -347,7 +355,7 @@ private fun TerminalInputRow(
                     if (input.isEmpty()) {
                         Text(
                             text = stringResource(R.string.terminal_input_hint),
-                            style = TERMINAL_TEXT_STYLE,
+                            style = textStyle,
                             color = TerminalMuted,
                         )
                     }
@@ -429,10 +437,10 @@ private val TerminalForeground = Color(0xFFD7DEE8)
 private val TerminalMuted = Color(0xFF7F8794)
 private val TerminalGreen = Color(0xFF34D399)
 
-private val TERMINAL_TEXT_STYLE = TextStyle(
+private fun terminalTextStyle(fontSizeSp: Float): TextStyle = TextStyle(
     fontFamily = FontFamily.Monospace,
-    fontSize = 12.5.sp,
-    lineHeight = 18.sp,
+    fontSize = fontSizeSp.sp,
+    lineHeight = (fontSizeSp * 1.45f).sp,
     color = TerminalForeground,
 )
 

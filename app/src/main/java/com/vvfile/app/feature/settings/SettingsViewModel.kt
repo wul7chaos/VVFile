@@ -48,6 +48,10 @@ class SettingsViewModel(
 
     fun setAccentIndex(index: Int) = write { repository.setAccentIndex(index) }
 
+    fun setTerminalFontSize(size: Int) = write { repository.setTerminalFontSize(size) }
+
+    fun setEditorFontSize(size: Int) = write { repository.setEditorFontSize(size) }
+
     fun setSort(spec: SortSpec) = write { repository.setSort(spec) }
 
     fun setSortField(field: SortField) = write { repository.setSortField(field) }

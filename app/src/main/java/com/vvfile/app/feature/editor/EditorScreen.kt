@@ -83,6 +83,7 @@ fun EditorScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     showLineNumbers: Boolean = true,
+    fontSizeSp: Float = 13f,
 ) {
     // 每次打开文件使用独立的 ViewModelStore：关闭时清空，避免复用上一个文件的缓冲区
     val owner = remember(path) {
@@ -102,6 +103,7 @@ fun EditorScreen(
         onClose = onClose,
         modifier = modifier,
         showLineNumbers = showLineNumbers,
+        fontSizeSp = fontSizeSp,
         viewModel = editorViewModel,
     )
 }
@@ -112,6 +114,7 @@ private fun EditorScreenContent(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     showLineNumbers: Boolean = true,
+    fontSizeSp: Float = 13f,
     viewModel: EditorViewModel,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -159,6 +162,7 @@ private fun EditorScreenContent(
             onClose()
         },
         showLineNumbers = showLineNumbers,
+        fontSizeSp = fontSizeSp,
         modifier = modifier,
     )
 }
@@ -176,6 +180,7 @@ internal fun EditorContent(
     onDismissExit: () -> Unit,
     onDiscard: () -> Unit,
     showLineNumbers: Boolean = true,
+    fontSizeSp: Float = 13f,
     modifier: Modifier = Modifier,
 ) {
     var searchVisible by rememberSaveable { mutableStateOf(false) }
@@ -280,6 +285,7 @@ internal fun EditorContent(
                         onValueChange = onValueChange,
                         readOnly = state.readOnly,
                         showLineNumbers = showLineNumbers,
+                        fontSizeSp = fontSizeSp,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -537,15 +543,16 @@ private fun TextEditorBody(
     onValueChange: (TextFieldValue) -> Unit,
     readOnly: Boolean,
     showLineNumbers: Boolean,
+    fontSizeSp: Float = 13f,
     modifier: Modifier = Modifier,
 ) {
     val verticalScroll = rememberScrollState()
     val horizontalScroll = rememberScrollState()
-    val monoStyle = remember {
+    val monoStyle = remember(fontSizeSp) {
         TextStyle(
             fontFamily = FontFamily.Monospace,
-            fontSize = 13.sp,
-            lineHeight = 18.sp,
+            fontSize = fontSizeSp.sp,
+            lineHeight = (fontSizeSp * 1.4f).sp,
         )
     }
     val lineCount = remember(value.text) { value.text.count { it == '\n' } + 1 }

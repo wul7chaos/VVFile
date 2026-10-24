@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                             path = path,
                             onClose = { editingPath = null },
                             modifier = Modifier.fillMaxSize(),
+                            fontSizeSp = settings.editorFontSize.toFloat(),
                         )
                     }
 
@@ -118,6 +119,7 @@ class MainActivity : ComponentActivity() {
                         TerminalScreen(
                             onClose = { showTerminal = false },
                             modifier = Modifier.fillMaxSize(),
+                            fontSizeSp = settings.terminalFontSize.toFloat(),
                         )
                     }
 
