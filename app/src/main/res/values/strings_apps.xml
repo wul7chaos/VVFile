@@ -1,0 +1,20 @@
+<resources>
+    <string name="apps_title">已安装应用</string>
+    <string name="apps_search_hint">搜索应用名或包名</string>
+    <string name="apps_include_system">系统应用</string>
+    <string name="apps_count">共 %1$d 个</string>
+    <string name="apps_loading">正在读取应用列表…</string>
+    <string name="apps_empty">没有匹配的应用</string>
+    <string name="apps_error">读取应用列表失败</string>
+    <string name="apps_retry">重试</string>
+    <string name="apps_launch">启动</string>
+    <string name="apps_info">应用信息</string>
+    <string name="apps_export">导出 APK</string>
+    <string name="apps_uninstall">卸载</string>
+    <string name="apps_system">系统</string>
+    <string name="apps_exporting">正在导出 APK</string>
+    <string name="apps_export_progress">%1$d%%</string>
+    <string name="apps_export_cancel_hint">导出期间请保持应用在前台</string>
+    <string name="apps_refresh">刷新</string>
+    <string name="apps_back">返回</string>
+</resources>

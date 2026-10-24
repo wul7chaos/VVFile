@@ -25,6 +25,7 @@ import com.vvfile.app.core.share.FileOpener
 import com.vvfile.app.data.prefs.PrefsRepository
 import com.vvfile.app.data.prefs.Settings
 import com.vvfile.app.data.prefs.ThemeMode
+import com.vvfile.app.feature.apps.AppListScreen
 import com.vvfile.app.feature.browser.BrowserScreen
 import com.vvfile.app.feature.editor.EditorScreen
 import com.vvfile.app.feature.settings.SettingsScreen
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
                 var editingPath by remember { mutableStateOf<String?>(null) }
                 var showSettings by remember { mutableStateOf(false) }
                 var showTerminal by remember { mutableStateOf(false) }
+                var showApps by remember { mutableStateOf(false) }
 
                 Box(Modifier.fillMaxSize()) {
                     BrowserScreen(
@@ -77,6 +79,7 @@ class MainActivity : ComponentActivity() {
                             when (tool) {
                                 "设置" -> showSettings = true
                                 "终端模拟器" -> showTerminal = true
+                                "已安装应用" -> showApps = true
                                 "文本编辑器" -> Toast.makeText(
                                     this@MainActivity,
                                     "从文件列表点击文本文件即可编辑",
@@ -109,6 +112,13 @@ class MainActivity : ComponentActivity() {
                     if (showTerminal) {
                         TerminalScreen(
                             onClose = { showTerminal = false },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    if (showApps) {
+                        AppListScreen(
+                            onClose = { showApps = false },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
