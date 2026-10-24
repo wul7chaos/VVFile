@@ -103,6 +103,8 @@ import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 import com.vvfile.app.core.share.FileSharer
+import com.vvfile.app.data.file.FileProperties
+import com.vvfile.app.data.file.FilePropertyReader
 import com.vvfile.app.ui.components.PathBar
 import com.vvfile.app.ui.theme.VVDanger
 import com.vvfile.app.ui.theme.VVWarn
@@ -120,6 +122,7 @@ fun BrowserScreen(
     val scope = rememberCoroutineScope()
     var hasPermission by remember { mutableStateOf(hasStoragePermission(context)) }
     var showAbout by remember { mutableStateOf(false) }
+    var properties by remember { mutableStateOf<FileProperties?>(null) }
 
     // 每个窗格一份滚动状态；路径变化时回到顶部（requestScrollToItem 在列表尚未布局时也生效）
     val leftListState = rememberLazyListState()
@@ -306,6 +309,12 @@ fun BrowserScreen(
                     onShare = {
                         FileSharer.share(context, activePane.selected.toList())
                     },
+                    canProperties = singleSelected != null,
+                    onProperties = {
+                        singleSelected?.let { entry ->
+                            scope.launch { properties = FilePropertyReader.read(entry.path) }
+                        }
+                    },
                 )
             } else {
                 BrowserBottomBar(
@@ -327,6 +336,10 @@ fun BrowserScreen(
 
     if (showAbout) {
         AboutDialog(onDismiss = { showAbout = false })
+    }
+
+    properties?.let { info ->
+        PropertiesDialog(properties = info, onDismiss = { properties = null })
     }
 
     state.operation?.let { operation ->
@@ -714,6 +727,8 @@ private fun SelectionBottomBar(
     canUnzip: Boolean,
     onUnzip: () -> Unit,
     onShare: () -> Unit,
+    canProperties: Boolean,
+    onProperties: () -> Unit,
 ) {
     var moreOpen by remember { mutableStateOf(false) }
     Row(
@@ -780,6 +795,13 @@ private fun SelectionBottomBar(
                     icon = Icons.Outlined.Share,
                     label = stringResource(R.string.ui_action_share),
                     onAction = onShare,
+                    onClose = { moreOpen = false },
+                )
+                SelectionMoreItem(
+                    icon = Icons.Outlined.Info,
+                    label = stringResource(R.string.ui_action_properties),
+                    enabled = canProperties,
+                    onAction = onProperties,
                     onClose = { moreOpen = false },
                 )
             }
@@ -903,6 +925,61 @@ private data class NameDialogState(
     val mode: NameDialogMode,
     val initialName: String,
 )
+
+@Composable
+private fun PropertiesDialog(properties: FileProperties, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = properties.name,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        text = {
+            Column {
+                PropertyRow("类型", properties.typeText)
+                PropertyRow("路径", properties.path)
+                PropertyRow("大小", properties.sizeText)
+                PropertyRow("修改时间", properties.modifiedText)
+                PropertyRow("权限", properties.permissions)
+                PropertyRow("所有者", properties.owner)
+                PropertyRow(
+                    "可读 / 可写",
+                    "${if (properties.readable) "是" else "否"} / ${if (properties.writable) "是" else "否"}",
+                )
+                if (properties.isSymlink) {
+                    PropertyRow("符号链接", "是")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+    )
+}
+
+@Composable
+private fun PropertyRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(78.dp),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
 
 /** 压缩默认名：去掉最后一个扩展名，保留 `.hidden` 这类点开头的完整名称。 */
 private fun defaultZipBaseName(entry: FileEntry): String {
