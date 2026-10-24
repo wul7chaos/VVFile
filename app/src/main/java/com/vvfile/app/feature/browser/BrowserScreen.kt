@@ -128,6 +128,7 @@ fun BrowserScreen(
     var showAbout by remember { mutableStateOf(false) }
     var properties by remember { mutableStateOf<FileProperties?>(null) }
     var showFilter by remember { mutableStateOf(false) }
+    var showUnzipTo by remember { mutableStateOf(false) }
 
     // 每个窗格一份滚动状态；路径变化时回到顶部（requestScrollToItem 在列表尚未布局时也生效）
     val leftListState = rememberLazyListState()
@@ -325,7 +326,8 @@ fun BrowserScreen(
                         )
                     },
                     canUnzip = canUnzip,
-                    onUnzip = viewModel::unzipSelection,
+                    onUnzip = { viewModel.unzipSelection() },
+                    onUnzipTo = { showUnzipTo = true },
                     onShare = {
                         FileSharer.share(context, activePane.selected.toList())
                     },
@@ -360,6 +362,17 @@ fun BrowserScreen(
 
     properties?.let { info ->
         PropertiesDialog(properties = info, onDismiss = { properties = null })
+    }
+
+    if (showUnzipTo) {
+        UnzipToDialog(
+            defaultPath = activePane.path,
+            onConfirm = { path ->
+                showUnzipTo = false
+                viewModel.unzipSelection(path)
+            },
+            onDismiss = { showUnzipTo = false },
+        )
     }
 
     if (showFilter) {
@@ -777,6 +790,7 @@ private fun SelectionBottomBar(
     onCompress: () -> Unit,
     canUnzip: Boolean,
     onUnzip: () -> Unit,
+    onUnzipTo: () -> Unit,
     onShare: () -> Unit,
     canProperties: Boolean,
     onProperties: () -> Unit,
@@ -840,6 +854,13 @@ private fun SelectionBottomBar(
                     label = stringResource(R.string.ui_action_unzip),
                     enabled = canUnzip,
                     onAction = onUnzip,
+                    onClose = { moreOpen = false },
+                )
+                SelectionMoreItem(
+                    icon = Icons.Outlined.FolderOpen,
+                    label = stringResource(R.string.ui_action_unzip_to),
+                    enabled = canUnzip,
+                    onAction = onUnzipTo,
                     onClose = { moreOpen = false },
                 )
                 SelectionMoreItem(
@@ -976,6 +997,40 @@ private data class NameDialogState(
     val mode: NameDialogMode,
     val initialName: String,
 )
+
+@Composable
+private fun UnzipToDialog(
+    defaultPath: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var path by remember { mutableStateOf(defaultPath) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ui_unzip_to_title)) },
+        text = {
+            OutlinedTextField(
+                value = path,
+                onValueChange = { path = it },
+                label = { Text(stringResource(R.string.ui_unzip_to_path)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { path.trim().takeIf { it.isNotEmpty() }?.let(onConfirm) },
+            ) {
+                Text(stringResource(R.string.ui_unzip_to_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.ui_filter_cancel))
+            }
+        },
+    )
+}
 
 @Composable
 private fun FilterDialog(

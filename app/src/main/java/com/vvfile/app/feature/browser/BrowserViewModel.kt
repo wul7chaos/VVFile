@@ -271,20 +271,21 @@ class BrowserViewModel : ViewModel() {
         startFlow(OperationKind.ZIP) { operator.zip(sources, targetZip) }
     }
 
-    fun unzipSelection() {
+    fun unzipSelection(targetDir: String? = null) {
         if (isBusy()) return notifyBusy()
         val pane = activePaneState()
         val zip = selectedEntries(pane).singleOrNull()
             ?.takeIf { !it.isDirectory && it.extension == "zip" }
             ?: return postMessage(UiMessage.Simple(R.string.ui_ops_unzip_requires_zip))
-        if (pane.path.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
+        val target = targetDir?.trim()?.takeIf { it.isNotEmpty() } ?: pane.path
+        if (target.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
         viewModelScope.launch {
             try {
-                val conflicts = operator.findZipConflicts(zip.path, pane.path)
+                val conflicts = operator.findZipConflicts(zip.path, target)
                 if (conflicts.isEmpty()) {
-                    startFlow(OperationKind.UNZIP) { operator.unzip(zip.path, pane.path) }
+                    startFlow(OperationKind.UNZIP) { operator.unzip(zip.path, target) }
                 } else {
-                    pendingUnzip = PendingUnzip(zip.path, pane.path)
+                    pendingUnzip = PendingUnzip(zip.path, target)
                     _state.update {
                         it.copy(conflictPrompt = ConflictPrompt(OperationKind.UNZIP, conflicts.size))
                     }

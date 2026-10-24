@@ -10,6 +10,10 @@
     <string name="ui_action_more">更多</string>
     <string name="ui_action_rename">重命名</string>
     <string name="ui_action_compress">压缩</string>
+    <string name="ui_action_unzip_to">解压到…</string>
+    <string name="ui_unzip_to_title">解压到指定目录</string>
+    <string name="ui_unzip_to_path">目标目录</string>
+    <string name="ui_unzip_to_confirm">解压</string>
     <string name="ui_action_share">分享</string>
     <string name="ui_action_properties">属性</string>
     <string name="ui_filter_title">过滤</string>
