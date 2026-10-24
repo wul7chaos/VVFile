@@ -1,6 +1,10 @@
 package com.vvfile.app
 
 import android.app.Application
+import com.vvfile.app.core.io.FallbackFileSystem
+import com.vvfile.app.core.io.NioFileSystem
+import com.vvfile.app.core.io.ShellFileSystem
+import com.vvfile.app.core.shell.RootManager
 import com.vvfile.app.data.file.FileOperator
 import com.vvfile.app.data.file.FileRepository
 import com.vvfile.app.data.file.LocalFileOperator
@@ -21,7 +25,14 @@ object ServiceLocator {
 
     fun init() {
         if (!::fileRepository.isInitialized) {
-            fileRepository = FileRepository()
+            // 普通目录走 NIO；无权限且 root 可用时自动回退到 su 只读通道
+            fileRepository = FileRepository(
+                FallbackFileSystem(
+                    direct = NioFileSystem(),
+                    root = ShellFileSystem(),
+                    rootAvailable = RootManager::isAvailable,
+                ),
+            )
         }
         if (!::fileOperator.isInitialized) {
             fileOperator = LocalFileOperator()
