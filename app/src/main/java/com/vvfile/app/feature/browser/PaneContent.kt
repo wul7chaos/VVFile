@@ -96,7 +96,6 @@ fun PaneContent(
                         FileRow(
                             entry = entry,
                             isSelected = entry.path in pane.selected,
-                            selectionMode = pane.selectionMode,
                             onClick = {
                                 if (pane.selectionMode) {
                                     onToggleSelect(entry)
@@ -107,6 +106,7 @@ fun PaneContent(
                                 }
                             },
                             onLongClick = { onToggleSelect(entry) },
+                            onSwipeSelect = { onToggleSelect(entry) },
                         )
                     }
                 }

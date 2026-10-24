@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.collect
 
 data class PathSegment(val label: String, val fullPath: String)
@@ -64,7 +65,7 @@ fun PathBar(
                     imageVector = Icons.Outlined.ChevronRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(12.dp),
                 )
                 segments.drop(1).forEachIndexed { index, segment ->
                     if (index > 0) {
@@ -72,7 +73,7 @@ fun PathBar(
                             imageVector = Icons.Outlined.ChevronRight,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(12.dp),
                         )
                     }
                     PathLabel(
@@ -94,7 +95,10 @@ private fun PathLabel(
 ) {
     Text(
         text = label,
-        style = MaterialTheme.typography.bodyMedium,
+        style = MaterialTheme.typography.bodyMedium.copy(
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        ),
         fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
         color = if (isCurrent) {
             MaterialTheme.colorScheme.onSurface
@@ -105,7 +109,7 @@ private fun PathLabel(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(horizontal = 4.dp, vertical = 3.dp),
     )
 }
 
