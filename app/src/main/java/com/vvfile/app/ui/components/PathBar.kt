@@ -21,11 +21,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.collect
 
 data class PathSegment(val label: String, val fullPath: String)
 
-/** 面包屑：根目录 + 逐级路径，超长横向滚动。 */
+/**
+ * 面包屑：根目录固定在最左侧（始终可点），其余层级横向滚动。
+ * 路径变化后滚动到尾部，保证当前目录可见；深层路径也不会把「/」挤出可视区。
+ */
 @Composable
 fun PathBar(
     path: String,
@@ -35,41 +38,75 @@ fun PathBar(
     val segments = remember(path) { buildSegments(path) }
     val scrollState = rememberScrollState()
     LaunchedEffect(path) {
-        // 路径变化后滚到最右，保证当前目录可见
-        val target = snapshotFlow { scrollState.maxValue }.firstOrNull { it > 0 }
-        if (target != null) scrollState.scrollTo(target)
+        // 持续跟随可滚动余量变化：布局完成后再滚到尾部，保证当前目录完整可见
+        snapshotFlow { scrollState.maxValue }.collect { max ->
+            if (max > 0) scrollState.scrollTo(max)
+        }
     }
     Row(
-        modifier = modifier.horizontalScroll(scrollState),
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        segments.forEachIndexed { index, segment ->
-            if (index > 0) {
+        // 根入口不参与滚动，任何深度下都能一键回 "/"
+        PathLabel(
+            label = "/",
+            isCurrent = segments.size == 1,
+            onClick = { onNavigate("/") },
+        )
+        if (segments.size > 1) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(scrollState),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Icon(
                     imageVector = Icons.Outlined.ChevronRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(14.dp),
                 )
+                segments.drop(1).forEachIndexed { index, segment ->
+                    if (index > 0) {
+                        Icon(
+                            imageVector = Icons.Outlined.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                    PathLabel(
+                        label = segment.label,
+                        isCurrent = index == segments.size - 2,
+                        onClick = { onNavigate(segment.fullPath) },
+                    )
+                }
             }
-            val isLast = index == segments.lastIndex
-            Text(
-                text = segment.label,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isLast) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (isLast) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 1,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable { onNavigate(segment.fullPath) }
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
-            )
         }
     }
+}
+
+@Composable
+private fun PathLabel(
+    label: String,
+    isCurrent: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (isCurrent) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        maxLines = 1,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+    )
 }
 
 fun buildSegments(path: String): List<PathSegment> {

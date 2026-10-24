@@ -114,6 +114,11 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
     val rightListState = rememberLazyListState()
     LaunchedEffect(state.left.path) { leftListState.requestScrollToItem(0) }
     LaunchedEffect(state.right.path) { rightListState.requestScrollToItem(0) }
+    // 排序变化后两窗格都回到顶部，避免新排序下首行被裁成半截
+    LaunchedEffect(state.sort) {
+        leftListState.requestScrollToItem(0)
+        rightListState.requestScrollToItem(0)
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -132,9 +137,12 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
         Toast.makeText(context, R.string.ui_action_m2_placeholder, Toast.LENGTH_SHORT).show()
     }
 
-    // 返回键优先退出选择态；抽屉展开时让抽屉先处理返回
-    BackHandler(enabled = selectionActive && !drawerState.isOpen) {
-        viewModel.clearSelection(state.active)
+    // 返回键收敛顺序：选择态 → 抽屉 → 交给系统（退出）
+    BackHandler(enabled = selectionActive || drawerState.isOpen) {
+        when {
+            selectionActive -> viewModel.clearSelection(state.active)
+            drawerState.isOpen -> scope.launch { drawerState.close() }
+        }
     }
 
     ModalNavigationDrawer(
@@ -190,8 +198,12 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                     active = state.active == PaneId.LEFT,
                     listState = leftListState,
                     onActivate = { viewModel.setActive(PaneId.LEFT) },
-                    onOpenDir = { viewModel.navigate(PaneId.LEFT, it) },
+                    onOpenDir = { path ->
+                        viewModel.setActive(PaneId.LEFT)
+                        viewModel.navigate(PaneId.LEFT, path)
+                    },
                     onOpenFile = { entry ->
+                        viewModel.setActive(PaneId.LEFT)
                         Toast.makeText(context, "打开 ${entry.name}：M2 接入", Toast.LENGTH_SHORT).show()
                     },
                     onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.LEFT, entry.path) },
@@ -211,8 +223,12 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                         active = state.active == PaneId.RIGHT,
                         listState = rightListState,
                         onActivate = { viewModel.setActive(PaneId.RIGHT) },
-                        onOpenDir = { viewModel.navigate(PaneId.RIGHT, it) },
+                        onOpenDir = { path ->
+                            viewModel.setActive(PaneId.RIGHT)
+                            viewModel.navigate(PaneId.RIGHT, path)
+                        },
                         onOpenFile = { entry ->
+                            viewModel.setActive(PaneId.RIGHT)
                             Toast.makeText(context, "打开 ${entry.name}：M2 接入", Toast.LENGTH_SHORT).show()
                         },
                         onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.RIGHT, entry.path) },
