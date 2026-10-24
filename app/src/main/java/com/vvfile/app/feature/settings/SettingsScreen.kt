@@ -1,4 +1,5 @@
 package com.vvfile.app.feature.settings
+import androidx.compose.ui.graphics.RectangleShape
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -19,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -218,7 +218,7 @@ private fun SettingsSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RectangleShape)
                 .background(MaterialTheme.colorScheme.surface),
             content = content,
         )
@@ -421,3 +421,5 @@ private fun SettingsContentPreview() {
         )
     }
 }
+
+

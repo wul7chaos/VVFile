@@ -1,4 +1,5 @@
 package com.vvfile.app.feature.browser
+import androidx.compose.ui.graphics.RectangleShape
 
 import android.os.Build
 import androidx.compose.foundation.background
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -61,7 +61,7 @@ fun DrawerContent(
                 Box(
                     modifier = Modifier
                         .size(44.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RectangleShape)
                         .background(
                             Brush.linearGradient(
                                 listOf(
@@ -130,7 +130,7 @@ private fun RootChip(available: Boolean) {
     val tint = if (available) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RectangleShape)
             .background(tint.copy(alpha = 0.12f))
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -138,7 +138,7 @@ private fun RootChip(available: Boolean) {
         Box(
             Modifier
                 .size(6.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .clip(RectangleShape)
                 .background(tint),
         )
         Spacer(Modifier.width(6.dp))
@@ -160,7 +160,7 @@ private fun DrawerItem(
         modifier = Modifier
             .fillMaxWidth()
             .height(46.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RectangleShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -186,3 +186,5 @@ private fun DrawerItem(
         )
     }
 }
+
+

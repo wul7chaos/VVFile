@@ -1,4 +1,5 @@
 package com.vvfile.app.ui.components
+import androidx.compose.ui.graphics.RectangleShape
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.Icon
@@ -136,7 +136,7 @@ private fun PathLabel(
         },
         maxLines = 1,
         modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RectangleShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 3.dp, vertical = 3.dp),
     )
@@ -153,3 +153,5 @@ fun buildSegments(path: String): List<PathSegment> {
     }
     return result
 }
+
+

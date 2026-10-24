@@ -18,8 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -140,7 +139,7 @@ private fun LoadingState() {
                     .fillMaxWidth()
                     .height(40.dp)
                     .padding(vertical = 2.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RectangleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
             )
         }
@@ -157,7 +156,7 @@ private fun EmptyState(onNewFolder: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(64.dp)
-                .clip(CircleShape)
+                .clip(RectangleShape)
                 .background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
@@ -205,7 +204,7 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RectangleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 18.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -213,7 +212,7 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
             Box(
                 modifier = Modifier
                     .size(44.dp)
-                    .clip(CircleShape)
+                    .clip(RectangleShape)
                     .background(error.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
@@ -252,3 +251,5 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
         }
     }
 }
+
+

@@ -1,4 +1,5 @@
 package com.vvfile.app.ui.components
+import androidx.compose.ui.graphics.RectangleShape
 
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -19,7 +20,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Android
@@ -99,7 +99,7 @@ fun FileRow(
             .fillMaxWidth()
             .height(44.dp)
             .offset { IntOffset(animatedOffset.roundToInt(), 0) }
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RectangleShape)
             .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .pointerInput(entry.path) {
                 detectHorizontalDragGestures(
@@ -248,3 +248,5 @@ private fun FileRowPreview() {
         }
     }
 }
+
+

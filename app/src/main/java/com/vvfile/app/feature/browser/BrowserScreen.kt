@@ -1,4 +1,5 @@
 package com.vvfile.app.feature.browser
+import androidx.compose.ui.graphics.RectangleShape
 
 import android.Manifest
 import android.content.Context
@@ -28,7 +29,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -420,7 +420,7 @@ private fun BrowserTopBar(
                 .weight(1f)
                 .height(32.dp)
                 .padding(horizontal = 4.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .clip(RectangleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(3.dp),
         ) {
@@ -506,7 +506,7 @@ private fun RowScope.PaneTab(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RectangleShape)
             .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -854,7 +854,7 @@ private fun NavAction(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RectangleShape)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 7.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1028,7 +1028,7 @@ private fun OperationProgressDialog(operation: OperationUiState, onCancel: () ->
     val barModifier = Modifier
         .fillMaxWidth()
         .height(6.dp)
-        .clip(RoundedCornerShape(3.dp))
+        .clip(RectangleShape)
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(title) },
@@ -1225,3 +1225,5 @@ private fun openAllFilesSettings(context: Context) {
         }
     }
 }
+
+
