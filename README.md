@@ -6,7 +6,7 @@
 - 包名：`com.vvfile.app`（debug 变体 `com.vvfile.app.debug`）
 - 技术栈：Kotlin · Jetpack Compose · Material 3
 - 最低版本：Android 8.0（API 26），targetSdk 36
-- 当前阶段：**M2/M4 文件操作、编辑器、终端、设置已接入（W2/W3）**；回归见 [docs/qa](docs/qa/)
+- 当前阶段：**1.0.0 Release 构建通过**；功能与验收见 [docs/qa/2026-10-25-验收.md](docs/qa/2026-10-25-验收.md)
 
 ## 文档
 
