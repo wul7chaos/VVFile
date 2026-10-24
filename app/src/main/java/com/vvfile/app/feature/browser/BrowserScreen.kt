@@ -50,6 +50,7 @@ import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material.icons.outlined.Visibility
@@ -101,13 +102,18 @@ import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
+import com.vvfile.app.core.share.FileSharer
 import com.vvfile.app.ui.components.PathBar
 import com.vvfile.app.ui.theme.VVDanger
 import com.vvfile.app.ui.theme.VVWarn
 import kotlinx.coroutines.launch
 
 @Composable
-fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
+fun BrowserScreen(
+    viewModel: BrowserViewModel = viewModel(),
+    onOpenFile: ((String) -> Unit)? = null,
+    onToolClick: ((String) -> Unit)? = null,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -171,7 +177,11 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
         drawerState = drawerState,
         drawerContent = {
             DrawerContent(state) { tool ->
-                Toast.makeText(context, "$tool · 后续里程碑接入", Toast.LENGTH_SHORT).show()
+                if (onToolClick != null) {
+                    onToolClick(tool)
+                } else {
+                    Toast.makeText(context, "$tool · 后续里程碑接入", Toast.LENGTH_SHORT).show()
+                }
             }
         },
     ) {
@@ -226,7 +236,11 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                     },
                     onOpenFile = { entry ->
                         viewModel.setActive(PaneId.LEFT)
-                        Toast.makeText(context, "打开 ${entry.name}：M2 接入", Toast.LENGTH_SHORT).show()
+                        if (onOpenFile != null) {
+                            onOpenFile(entry.path)
+                        } else {
+                            Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
+                        }
                     },
                     onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.LEFT, entry.path) },
                     onRetry = { viewModel.refresh(PaneId.LEFT) },
@@ -254,7 +268,11 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                         },
                         onOpenFile = { entry ->
                             viewModel.setActive(PaneId.RIGHT)
-                            Toast.makeText(context, "打开 ${entry.name}：M2 接入", Toast.LENGTH_SHORT).show()
+                            if (onOpenFile != null) {
+                                onOpenFile(entry.path)
+                            } else {
+                                Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
+                            }
                         },
                         onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.RIGHT, entry.path) },
                         onRetry = { viewModel.refresh(PaneId.RIGHT) },
@@ -285,6 +303,9 @@ fun BrowserScreen(viewModel: BrowserViewModel = viewModel()) {
                     },
                     canUnzip = canUnzip,
                     onUnzip = viewModel::unzipSelection,
+                    onShare = {
+                        FileSharer.share(context, activePane.selected.toList())
+                    },
                 )
             } else {
                 BrowserBottomBar(
@@ -556,7 +577,7 @@ private fun BrowserBreadcrumbBar(
             text = if (pane.selectionMode) {
                 "${pane.selected.size}/${pane.entries.size}"
             } else {
-                "${pane.entries.size} 项"
+                "${pane.entries.size}"
             },
             style = MaterialTheme.typography.labelMedium,
             color = if (pane.selectionMode) {
@@ -692,6 +713,7 @@ private fun SelectionBottomBar(
     onCompress: () -> Unit,
     canUnzip: Boolean,
     onUnzip: () -> Unit,
+    onShare: () -> Unit,
 ) {
     var moreOpen by remember { mutableStateOf(false) }
     Row(
@@ -752,6 +774,12 @@ private fun SelectionBottomBar(
                     label = stringResource(R.string.ui_action_unzip),
                     enabled = canUnzip,
                     onAction = onUnzip,
+                    onClose = { moreOpen = false },
+                )
+                SelectionMoreItem(
+                    icon = Icons.Outlined.Share,
+                    label = stringResource(R.string.ui_action_share),
+                    onAction = onShare,
                     onClose = { moreOpen = false },
                 )
             }
