@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +58,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vvfile.app.R
@@ -77,7 +80,36 @@ fun EditorScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     showLineNumbers: Boolean = true,
-    viewModel: EditorViewModel = viewModel(factory = EditorViewModel.factory(path)),
+) {
+    // 每次打开文件使用独立的 ViewModelStore：关闭时清空，避免复用上一个文件的缓冲区
+    val owner = remember(path) {
+        object : ViewModelStoreOwner {
+            override val viewModelStore = ViewModelStore()
+        }
+    }
+    DisposableEffect(owner) {
+        onDispose { owner.viewModelStore.clear() }
+    }
+    val editorViewModel: EditorViewModel = viewModel(
+        viewModelStoreOwner = owner,
+        factory = EditorViewModel.factory(path),
+    )
+    EditorScreenContent(
+        path = path,
+        onClose = onClose,
+        modifier = modifier,
+        showLineNumbers = showLineNumbers,
+        viewModel = editorViewModel,
+    )
+}
+
+@Composable
+private fun EditorScreenContent(
+    path: String,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    showLineNumbers: Boolean = true,
+    viewModel: EditorViewModel,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
