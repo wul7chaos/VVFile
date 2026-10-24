@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="terminal_title">终端</string>
+    <string name="terminal_session_sh">sh</string>
+    <string name="terminal_session_root">root</string>
+    <string name="terminal_clear">清屏</string>
+    <string name="terminal_close">关闭</string>
+    <string name="terminal_send">发送</string>
+    <string name="terminal_input_hint">输入命令，回车执行</string>
+    <string name="terminal_history_up">上一条命令</string>
+    <string name="terminal_history_down">下一条命令</string>
+    <string name="terminal_quick_commands">快捷命令</string>
+    <string name="terminal_root_unavailable">未检测到 su，root 会话可能不可用</string>
+    <string name="terminal_session_ended">会话已结束</string>
+</resources>
