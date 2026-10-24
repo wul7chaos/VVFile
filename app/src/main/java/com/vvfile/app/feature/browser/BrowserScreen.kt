@@ -105,6 +105,8 @@ import com.vvfile.app.data.model.SortSpec
 import com.vvfile.app.core.share.FileSharer
 import com.vvfile.app.data.file.FileProperties
 import com.vvfile.app.data.file.FilePropertyReader
+import com.vvfile.app.data.prefs.PrefsRepository
+import com.vvfile.app.data.prefs.Settings as AppSettings
 import com.vvfile.app.ui.components.PathBar
 import com.vvfile.app.ui.theme.VVDanger
 import com.vvfile.app.ui.theme.VVWarn
@@ -147,6 +149,12 @@ fun BrowserScreen(
     }
 
     val activePane = if (state.active == PaneId.LEFT) state.left else state.right
+
+    val settings by remember { PrefsRepository.get(context).settings }
+        .collectAsStateWithLifecycle(initialValue = AppSettings.DEFAULT)
+    LaunchedEffect(settings) {
+        viewModel.applySettings(settings)
+    }
     val selectionActive = activePane.selectionMode
     val activeSelectedEntries = activePane.entries.filter { it.path in activePane.selected }
     val singleSelected = activeSelectedEntries.singleOrNull()

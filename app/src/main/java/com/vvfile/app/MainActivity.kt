@@ -7,17 +7,28 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vvfile.app.core.format.MimeTypes
 import com.vvfile.app.core.share.FileOpener
+import com.vvfile.app.data.prefs.PrefsRepository
+import com.vvfile.app.data.prefs.Settings
+import com.vvfile.app.data.prefs.ThemeMode
 import com.vvfile.app.feature.browser.BrowserScreen
 import com.vvfile.app.feature.editor.EditorScreen
+import com.vvfile.app.feature.settings.SettingsScreen
+import com.vvfile.app.feature.terminal.TerminalScreen
 import com.vvfile.app.ui.theme.VVFileTheme
 
 class MainActivity : ComponentActivity() {
@@ -28,8 +39,27 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
-            VVFileTheme {
+            val context = LocalContext.current
+            val settings by PrefsRepository.get(context).settings
+                .collectAsStateWithLifecycle(initialValue = Settings.DEFAULT)
+            val darkTheme = when (settings.theme) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+            }
+            val view = LocalView.current
+            SideEffect {
+                val window = (context as? ComponentActivity)?.window ?: return@SideEffect
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !darkTheme
+                controller.isAppearanceLightNavigationBars = !darkTheme
+            }
+
+            VVFileTheme(darkTheme = darkTheme) {
                 var editingPath by remember { mutableStateOf<String?>(null) }
+                var showSettings by remember { mutableStateOf(false) }
+                var showTerminal by remember { mutableStateOf(false) }
+
                 Box(Modifier.fillMaxSize()) {
                     BrowserScreen(
                         onOpenFile = { path ->
@@ -44,12 +74,20 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onToolClick = { tool ->
-                            val message = when (tool) {
-                                "文本编辑器" -> "从文件列表点击文本文件即可编辑"
-                                "终端模拟器" -> "终端将在下一里程碑接入"
-                                else -> "$tool · 后续里程碑接入"
+                            when (tool) {
+                                "设置" -> showSettings = true
+                                "终端模拟器" -> showTerminal = true
+                                "文本编辑器" -> Toast.makeText(
+                                    this@MainActivity,
+                                    "从文件列表点击文本文件即可编辑",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                                else -> Toast.makeText(
+                                    this@MainActivity,
+                                    "$tool · 后续里程碑接入",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                             }
-                            Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
                         },
                     )
 
@@ -57,6 +95,20 @@ class MainActivity : ComponentActivity() {
                         EditorScreen(
                             path = path,
                             onClose = { editingPath = null },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    if (showSettings) {
+                        SettingsScreen(
+                            onClose = { showSettings = false },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    if (showTerminal) {
+                        TerminalScreen(
+                            onClose = { showTerminal = false },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }

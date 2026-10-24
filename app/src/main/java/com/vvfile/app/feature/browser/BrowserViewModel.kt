@@ -15,6 +15,7 @@ import com.vvfile.app.core.shell.RootManager
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
+import com.vvfile.app.data.prefs.Settings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -137,6 +138,29 @@ class BrowserViewModel : ViewModel() {
                 // 收起右窗格时丢弃其选择，避免重新展开后残留看不见的选中项
                 right = if (enabled) s.right else s.right.copy(selected = emptySet()),
             )
+        }
+    }
+
+    /** 应用设置页的默认值（启动与设置变化时调用）。 */
+    fun applySettings(settings: Settings) {
+        _state.update { s ->
+            val sort = settings.sort
+            s.copy(
+                showHidden = settings.showHidden,
+                dualPane = settings.dualPane,
+                sort = sort,
+                left = s.left.copy(entries = s.left.entries.sortedWith(sort.comparator())),
+                right = s.right.copy(
+                    entries = s.right.entries.sortedWith(sort.comparator()),
+                    selected = if (settings.dualPane) s.right.selected else emptySet(),
+                ),
+                active = if (settings.dualPane) s.active else PaneId.LEFT,
+            )
+        }
+        refreshAll()
+        settings.startPath?.takeIf { it.isNotBlank() }?.let { path ->
+            navigate(PaneId.LEFT, path)
+            if (settings.dualPane) navigate(PaneId.RIGHT, path)
         }
     }
 
