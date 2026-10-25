@@ -89,6 +89,19 @@ class PtyShellTest {
     }
 
     @Test
+    fun `启动脚本补一个 clear 函数，清屏并清回滚`() {
+        val rc = PtyShell.RC
+        assertTrue(rc.contains("clear() { printf '\\033[H\\033[2J\\033[3J'; }"))
+    }
+
+    @Test
+    fun `清屏序列归位并清掉回滚区`() {
+        assertEquals("\u001b[H\u001b[2J\u001b[3J", PtyShell.CLEAR_SEQUENCE)
+        // 3J 是 xterm 的「清回滚」，少了它 清空 之后往上翻还能看到旧输出。
+        assertTrue(PtyShell.CLEAR_SEQUENCE.contains("\u001b[3J"))
+    }
+
+    @Test
     fun `启动脚本写进 HOME 并通过 ENV 交给 shell`() {
         val home = tmp.newFolder("home")
         val rcPath = PtyShell.writeRc(home)

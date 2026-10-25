@@ -130,9 +130,36 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
 
     // ---------------------------------------------------------------- 会话动作
 
-    /** 菜单「清空」：直接清 VT 缓冲（不是发 `clear` 命令）。 */
+    /**
+     * 菜单「清空」。
+     *
+     * **不能**直接清 VT 缓冲：mksh 的行编辑器自己记着光标所在的列，我们偷偷把光标
+     * 移回 `(0,0)`，它下一次补全/退格/重绘就会按错的列去算位置，屏幕上会出现错位的字。
+     * 所以这里让 shell 自己清屏，走的是和 `clear` 命令完全相同的路径：
+     *
+     * 1. 先发 `^U`（kill line）丢掉正在输入的那半行 —— 否则下面拼出来的
+     *    `<半截命令>clear` 会被执行；
+     * 2. 再发 `clear` + 回车，由 `$ENV` 里的 `clear()` 函数输出清屏序列。
+     *
+     * 会话已经结束（没有 shell 可指挥）时退化为直接清缓冲，此时不存在状态错位问题。
+     */
     fun clear() {
-        session?.reset()
+        val active = session
+        if (active == null || !active.isRunning) {
+            clearBuffer()
+            return
+        }
+        releaseModifiers()
+        sendRaw(KILL_LINE)
+        handler.postDelayed({ if (session === active && active.isRunning) sendRaw(CLEAR_COMMAND) }, CLEAR_DELAY_MS)
+    }
+
+    /** 直接把清屏序列喂给仿真器；只在没有活着的 shell 时用。 */
+    private fun clearBuffer() {
+        val emulator = session?.emulator ?: return
+        val bytes = PtyShell.CLEAR_SEQUENCE.toByteArray(Charsets.US_ASCII)
+        emulator.append(bytes, bytes.size)
+        view?.onScreenUpdated()
     }
 
     /** 菜单「重置」/ 功能键 ↻：同一身份重开 shell。 */
@@ -331,5 +358,13 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         private const val EXTERNAL_ROOT = "/storage/emulated/0"
         private const val ROOT_EXIT_RESTART_MS = 350L
         private val CONTROL_C = byteArrayOf(0x03)
+
+        /** `^U`：kill line，丢掉正在输入的内容但不触发 SIGINT（不会刷掉 tty 输入队列）。 */
+        private val KILL_LINE = byteArrayOf(0x15)
+
+        private val CLEAR_COMMAND = "clear\r".toByteArray(Charsets.US_ASCII)
+
+        /** `^U` 与 `clear\r` 之间留一点时间，让 shell 先把行清掉。 */
+        private const val CLEAR_DELAY_MS = 60L
     }
 }

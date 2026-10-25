@@ -48,12 +48,21 @@ object PtyShell {
     const val RC_NAME = ".vvfile_env"
 
     /**
+     * 清屏序列：光标归位 + 清可视区 + 清回滚（`3J` 是 xterm 扩展，Termux 的仿真器支持）。
+     *
+     * 菜单「清空」和 `clear` 命令都用它，保证两条路径看到的屏幕一致。
+     */
+    const val CLEAR_SEQUENCE = "\u001b[H\u001b[2J\u001b[3J"
+
+    /**
      * 启动脚本内容。
      *
      * 1. `PS1`：MT 风格提示符。写在这里而不是只靠环境变量，是因为 `su` 之后
      *    root shell 可能不继承环境，但会继承 `$ENV`（KernelSU / Magisk 都保留）。
      * 2. `sudo`：Android 没有 sudo 二进制，用 mksh 函数补一个，语义与 MT 一致
      *    （只让这一条命令以 root 执行，会话身份不变）。
+     * 3. `clear`：不少机型（含原生 toybox）没有 `clear` 二进制，这里补一个函数，
+     *    顺便把回滚区也清掉。
      *
      * 注意：这是**被 source 的脚本**，不是被 exec 的可执行文件，所以不受 W^X 限制。
      */
@@ -67,6 +76,7 @@ object PtyShell {
         "  fi",
         "  su -c \"${'$'}*\"",
         "}",
+        "clear() { printf '\\033[H\\033[2J\\033[3J'; }",
         "",
     ).joinToString("\n")
 
