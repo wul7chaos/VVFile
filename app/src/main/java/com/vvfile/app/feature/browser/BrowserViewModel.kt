@@ -70,7 +70,7 @@ class BrowserViewModel : ViewModel() {
 
     fun setActive(pane: PaneId) {
         // 单窗格模式下右窗格不可用，活动窗格始终为左窗格
-        val target = if (_state.value.dualPane) pane else PaneId.LEFT
+        val target = pane
         if (_state.value.active == target) return
         _state.update { current ->
             // 离开带选择的窗格时结束其选择态，避免留下看不见的选中项
@@ -160,7 +160,7 @@ class BrowserViewModel : ViewModel() {
 
     /** 设置当前窗格的关键字/扩展名过滤；过滤变化时清空选择，避免操作到不可见条目。 */
     fun setFilter(pane: PaneId, query: String, extensions: String) {
-        val target = if (_state.value.dualPane) pane else PaneId.LEFT
+        val target = pane
         updatePane(target) {
             it.copy(
                 filterQuery = query.trim(),
@@ -193,44 +193,33 @@ class BrowserViewModel : ViewModel() {
         }
     }
 
-    fun setDualPane(enabled: Boolean) {
-        _state.update { s ->
-            s.copy(
-                dualPane = enabled,
-                active = PaneId.LEFT,
-                // 收起右窗格时丢弃其选择，避免重新展开后残留看不见的选中项
-                right = if (enabled) s.right else s.right.copy(selected = emptySet()),
-            )
-        }
-    }
-
     /** 应用设置页的默认值（启动与设置变化时调用）。 */
     fun applySettings(settings: Settings) {
         _state.update { s ->
             val sort = settings.sort
             s.copy(
                 showHidden = settings.showHidden,
-                dualPane = settings.dualPane,
+                dualPane = true,
                 sort = sort,
                 left = s.left.copy(entries = s.left.entries.sortedWith(sort.comparator())),
                 right = s.right.copy(
                     entries = s.right.entries.sortedWith(sort.comparator()),
-                    selected = if (settings.dualPane) s.right.selected else emptySet(),
+                    selected = s.right.selected,
                 ),
-                active = if (settings.dualPane) s.active else PaneId.LEFT,
+                active = s.active,
             )
         }
         refreshAll()
         settings.startPath?.takeIf { it.isNotBlank() }?.let { path ->
             navigate(PaneId.LEFT, path)
-            if (settings.dualPane) navigate(PaneId.RIGHT, path)
+            navigate(PaneId.RIGHT, path)
         }
     }
 
     /** 长按/选择态点击：切换单条选中状态，并把该窗格设为活动窗格。 */
     fun toggleSelect(pane: PaneId, path: String) {
         _state.update { s ->
-            val target = if (s.dualPane) pane else PaneId.LEFT
+            val target = pane
             val current = if (target == PaneId.LEFT) s.left else s.right
             val selected = if (path in current.selected) current.selected - path else current.selected + path
             s.withOnlySelection(target, selected)
@@ -243,7 +232,7 @@ class BrowserViewModel : ViewModel() {
 
     fun selectAll(pane: PaneId) {
         _state.update { s ->
-            val target = if (s.dualPane) pane else PaneId.LEFT
+            val target = pane
             val current = if (target == PaneId.LEFT) s.left else s.right
             s.withOnlySelection(target, current.entries.map { it.path }.toSet())
         }
@@ -251,7 +240,7 @@ class BrowserViewModel : ViewModel() {
 
     fun invertSelection(pane: PaneId) {
         _state.update { s ->
-            val target = if (s.dualPane) pane else PaneId.LEFT
+            val target = pane
             val current = if (target == PaneId.LEFT) s.left else s.right
             val visible = current.visibleEntries.map { it.path }.toSet()
             s.withOnlySelection(target, visible - current.selected)
@@ -415,9 +404,6 @@ class BrowserViewModel : ViewModel() {
     private fun startTransfer(kind: OperationKind) {
         if (isBusy()) return notifyBusy()
         val s = _state.value
-        if (!s.dualPane) {
-            return postMessage(UiMessage.Simple(R.string.ui_ops_single_pane_unavailable))
-        }
         val sourcePane = if (s.active == PaneId.LEFT) s.left else s.right
         val targetPane = if (s.active == PaneId.LEFT) s.right else s.left
         val sources = selectedPaths(sourcePane)
@@ -693,14 +679,28 @@ class BrowserViewModel : ViewModel() {
     private fun Exception.toUserMessage(target: String): String = when (this) {
         is SecurityException -> "没有权限读取此目录"
         is FileNotFoundException ->
-            // Android 11+ 的 FUSE 会把「别人的 Android/data、obb」报成 ENOENT，文案要说人话
-            if (isRestrictedSharedDir(target)) {
-                "系统限制访问其他应用的 Android/data、Android/obb 目录"
-            } else {
-                message ?: "目录不存在"
-            }
+            // Android 11+ 的 FUSE 会把「别人的 Android/data」「/storage/emulated」报成 ENOENT
+            restrictedMessage(target) ?: (message ?: "目录不存在")
 
         else -> message ?: "读取失败"
+    }
+
+    private fun restrictedMessage(target: String): String? = when {
+        isRestrictedSharedDir(target) -> "系统限制访问其他应用的 Android/data、Android/obb 目录"
+        isStorageParent(target) -> "系统限制访问该目录，需要 root 权限"
+        else -> null
+    }
+
+    /** `/storage/emulated` 本身、第二用户目录、`/storage/self` 这类 FUSE 不开放给应用的路径。 */
+    private fun isStorageParent(path: String): Boolean {
+        val normalized = path.replace('\\', '/').trimEnd('/')
+        if (normalized == "/storage/emulated" || normalized == "/storage/self") return true
+        if (normalized.startsWith("/storage/self/")) return true
+        if (normalized.startsWith("/storage/emulated/")) {
+            val user = normalized.removePrefix("/storage/emulated/").substringBefore('/')
+            return user != "0"
+        }
+        return false
     }
 
     /** 共享存储里被系统保护的目录（其他应用的 Android/data、Android/obb）。 */

@@ -26,8 +26,20 @@ object RootPaths {
         if (normalized == "/") return false
         // /data/media 是 /sdcard 的真实路径，应用自身可访问
         if (normalized == "/data/media" || normalized.startsWith("/data/media/")) return false
+        // /storage/emulated 本身、第二用户（999 等）与 /storage/self 在 FUSE 层对应用不可见，
+        // 只有 /storage/emulated/0 是应用的共享存储，这类路径要走 root
+        if (normalized == STORAGE_EMULATED || normalized == STORAGE_SELF) return true
+        if (normalized.startsWith("$STORAGE_EMULATED/")) {
+            val user = normalized.removePrefix("$STORAGE_EMULATED/").substringBefore('/')
+            if (user != PRIMARY_USER) return true
+        }
+        if (normalized.startsWith("$STORAGE_SELF/")) return true
         return ROOT_PREFIXES.any { prefix ->
             normalized == prefix || normalized.startsWith("$prefix/")
         }
     }
+
+    private const val STORAGE_EMULATED = "/storage/emulated"
+    private const val STORAGE_SELF = "/storage/self"
+    private const val PRIMARY_USER = "0"
 }

@@ -40,13 +40,17 @@ import androidx.compose.ui.unit.sp
 import com.vvfile.app.BuildConfig
 import com.vvfile.app.ui.components.StorageCard
 
+/** 抽屉宽度；「点右侧空白关闭」的区域起点要跟它对齐。 */
+internal val DRAWER_WIDTH = 300.dp
+
 @Composable
 fun DrawerContent(
     state: BrowserUiState,
+    onAbout: () -> Unit = {},
     onToolClick: (String) -> Unit,
 )  {
     ModalDrawerSheet(
-        modifier = Modifier.width(300.dp),
+        modifier = Modifier.width(DRAWER_WIDTH),
         drawerContainerColor = MaterialTheme.colorScheme.surface,
     ) {
         Column(
@@ -57,7 +61,15 @@ fun DrawerContent(
                 .padding(horizontal = 18.dp),
         ) {
             Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // 标题栏 = 关于入口：点 logo / 名称弹出关于信息
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RectangleShape)
+                    .clickable(onClick = onAbout)
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Box(
                     modifier = Modifier
                         .size(44.dp)
@@ -80,7 +92,7 @@ fun DrawerContent(
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
                         text = "VVFile",
                         style = MaterialTheme.typography.titleMedium,

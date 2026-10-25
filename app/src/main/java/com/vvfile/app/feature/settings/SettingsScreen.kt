@@ -97,7 +97,6 @@ fun SettingsScreen(
         onAccentChange = viewModel::setAccentIndex,
         onTerminalFontChange = viewModel::setTerminalFontSize,
         onEditorFontChange = viewModel::setEditorFontSize,
-        onDualPaneChange = viewModel::setDualPane,
         onShowHiddenChange = viewModel::setShowHidden,
         onDetailedListChange = viewModel::setDetailedList,
         onSortFieldChange = viewModel::setSortField,
@@ -119,7 +118,7 @@ internal fun SettingsContent(
     onAccentChange: (Int) -> Unit = {},
     onTerminalFontChange: (Int) -> Unit = {},
     onEditorFontChange: (Int) -> Unit = {},
-    onDualPaneChange: (Boolean) -> Unit,
+
     onShowHiddenChange: (Boolean) -> Unit,
     onDetailedListChange: (Boolean) -> Unit = {},
     onSortFieldChange: (SortField) -> Unit,
@@ -174,13 +173,6 @@ internal fun SettingsContent(
                 title = stringResource(R.string.settings_group_browsing),
                 icon = Icons.Outlined.FolderOpen,
             ) {
-                SettingSwitchRow(
-                    title = stringResource(R.string.settings_dual_pane),
-                    subtitle = stringResource(R.string.settings_dual_pane_hint),
-                    checked = settings.dualPane,
-                    onCheckedChange = onDualPaneChange,
-                )
-                RowDivider()
                 SettingSwitchRow(
                     title = stringResource(R.string.settings_show_hidden),
                     subtitle = stringResource(R.string.settings_show_hidden_hint),
@@ -635,13 +627,12 @@ private fun SettingsContentPreview() {
         SettingsContent(
             settings = Settings(
                 theme = ThemeMode.DARK,
-                dualPane = false,
+    
                 showHidden = true,
                 sort = SortSpec(field = SortField.SIZE, ascending = false),
             ),
             onClose = {},
             onThemeChange = {},
-            onDualPaneChange = {},
             onShowHiddenChange = {},
             onSortFieldChange = {},
             onSortAscendingChange = {},

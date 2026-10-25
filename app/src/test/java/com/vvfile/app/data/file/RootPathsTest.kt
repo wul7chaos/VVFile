@@ -27,4 +27,20 @@ class RootPathsTest {
         assertFalse(RootPaths.isRootOnly("/systematic"))
         assertFalse(RootPaths.isRootOnly("/database"))
     }
+
+    @Test
+    fun `storage emulated 父目录与多用户目录需要 root`() {
+        assertTrue(RootPaths.isRootOnly("/storage/emulated"))
+        assertTrue(RootPaths.isRootOnly("/storage/self"))
+        assertTrue(RootPaths.isRootOnly("/storage/self/primary"))
+        assertTrue(RootPaths.isRootOnly("/storage/emulated/999"))
+        assertTrue(RootPaths.isRootOnly("/storage/emulated/999/Android/data/foo"))
+    }
+
+    @Test
+    fun `主用户存储及其子目录不需要 root`() {
+        assertFalse(RootPaths.isRootOnly("/storage/emulated/0"))
+        assertFalse(RootPaths.isRootOnly("/storage/emulated/0/Download"))
+        assertFalse(RootPaths.isRootOnly("/storage/emulated/0/Android/data"))
+    }
 }

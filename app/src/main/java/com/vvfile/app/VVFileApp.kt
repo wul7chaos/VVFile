@@ -11,6 +11,7 @@ import com.vvfile.app.data.file.FallbackFileOperator
 import com.vvfile.app.data.file.FileOperator
 import com.vvfile.app.data.file.FileRepository
 import com.vvfile.app.data.file.LocalFileOperator
+import com.vvfile.app.data.file.RootPaths
 import com.vvfile.app.data.file.ShellFileOperator
 import com.vvfile.app.data.prefs.PrefsRepository
 
@@ -41,6 +42,7 @@ object ServiceLocator {
                     direct = NioFileSystem(),
                     root = ShellFileSystem(),
                     rootAvailable = RootAccess::allowed,
+                    rootOnly = RootPaths::isRootOnly,
                 ),
             )
         }

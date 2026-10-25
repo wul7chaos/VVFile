@@ -40,8 +40,6 @@ class SettingsViewModel(
 
     fun setTheme(mode: ThemeMode) = write { repository.setTheme(mode) }
 
-    fun setDualPane(enabled: Boolean) = write { repository.setDualPane(enabled) }
-
     fun setShowHidden(enabled: Boolean) = write { repository.setShowHidden(enabled) }
 
     fun setDetailedList(enabled: Boolean) = write { repository.setDetailedList(enabled) }

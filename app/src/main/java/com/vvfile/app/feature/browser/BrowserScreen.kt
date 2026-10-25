@@ -13,6 +13,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -212,12 +213,19 @@ fun BrowserScreen(
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         // 侧滑手势留给系统返回（上一层目录），抽屉只从菜单按钮打开，避免边滑被抽屉截走
         gesturesEnabled = false,
         drawerContent = {
-            DrawerContent(state) { tool ->
+            DrawerContent(
+                state = state,
+                onAbout = {
+                    scope.launch { drawerState.close() }
+                    showAbout = true
+                },
+            ) { tool ->
                 scope.launch { drawerState.close() }
                 if (onToolClick != null) {
                     onToolClick(tool)
@@ -243,15 +251,12 @@ fun BrowserScreen(
             } else {
                 BrowserTopBar(
                     active = state.active,
-                    dualPane = state.dualPane,
                     onActiveChange = viewModel::setActive,
                     onMenu = { scope.launch { drawerState.open() } },
                     showHidden = state.showHidden,
                     onRefresh = viewModel::refreshAll,
                     onToggleHidden = viewModel::toggleHidden,
-                    onToggleDualPane = { viewModel.setDualPane(!state.dualPane) },
                     onSwap = viewModel::swapPanes,
-                    onAbout = { showAbout = true },
                 )
             }
 
@@ -296,7 +301,7 @@ fun BrowserScreen(
                     onPullRefresh = { viewModel.refresh(PaneId.LEFT) },
                     modifier = Modifier.weight(1f),
                 )
-                if (state.dualPane) {
+                run {
                     Box(
                         Modifier
                             .width(1.dp)
@@ -375,6 +380,28 @@ fun BrowserScreen(
                     },
                     onSwap = viewModel::swapPanes,
                     onUp = { viewModel.navigateUp(state.active) },
+                )
+            }
+        }
+
+    }
+
+        // 抽屉打开时，点侧栏右侧未覆盖区域关闭。
+        // material3 的遮罩在 gesturesEnabled = false 时会吞掉点击却不关闭，
+        // 所以这里在抽屉整体之上单独盖一条「右侧空白」，只在打开时存在。
+        if (drawerState.isOpen) {
+            Row(Modifier.fillMaxSize()) {
+                Spacer(Modifier.width(DRAWER_WIDTH))
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            scope.launch { drawerState.close() }
+                        },
                 )
             }
         }
@@ -490,15 +517,12 @@ fun BrowserScreen(
 @Composable
 private fun BrowserTopBar(
     active: PaneId,
-    dualPane: Boolean,
     onActiveChange: (PaneId) -> Unit,
     onMenu: () -> Unit,
     showHidden: Boolean,
     onRefresh: () -> Unit,
     onToggleHidden: () -> Unit,
-    onToggleDualPane: () -> Unit,
     onSwap: () -> Unit,
-    onAbout: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -526,7 +550,7 @@ private fun BrowserTopBar(
                 .padding(3.dp),
         ) {
             PaneTab("左窗格", active == PaneId.LEFT) { onActiveChange(PaneId.LEFT) }
-            PaneTab("右窗格", active == PaneId.RIGHT, enabled = dualPane) {
+            PaneTab("右窗格", active == PaneId.RIGHT) {
                 onActiveChange(PaneId.RIGHT)
             }
         }
@@ -562,33 +586,11 @@ private fun BrowserTopBar(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.ui_single_pane_mode)) },
-                    leadingIcon = { Icon(Icons.Outlined.ViewColumn, contentDescription = null) },
-                    trailingIcon = {
-                        Switch(
-                            checked = !dualPane,
-                            onCheckedChange = null,
-                        )
-                    },
-                    onClick = {
-                        overflowOpen = false
-                        onToggleDualPane()
-                    },
-                )
-                DropdownMenuItem(
                     text = { Text("交换窗格") },
                     leadingIcon = { Icon(Icons.Outlined.SwapHoriz, contentDescription = null) },
                     onClick = {
                         overflowOpen = false
                         onSwap()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("关于 VVFile") },
-                    leadingIcon = { Icon(Icons.Outlined.Info, contentDescription = null) },
-                    onClick = {
-                        overflowOpen = false
-                        onAbout()
                     },
                 )
             }
