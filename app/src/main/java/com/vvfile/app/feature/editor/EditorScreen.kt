@@ -23,8 +23,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -47,12 +51,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -68,13 +78,15 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.VerticalSplit
 import androidx.compose.material.icons.outlined.EditNote
@@ -86,6 +98,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import kotlinx.coroutines.launch
 import com.vvfile.app.R
 import com.vvfile.app.ui.theme.VVFileTheme
 import com.vvfile.app.ui.theme.VVWarn
@@ -1114,11 +1127,17 @@ private fun TextEditorBody(
         val viewportHeight = maxHeight
         // 输入框至少撑满视口，点在文字下方的空白处也能聚焦
         val fieldMinHeight = maxOf(0.dp, viewportHeight - 16.dp)
+        var contentHeightPx by remember { mutableIntStateOf(0) }
+        val density = LocalDensity.current
+        val viewportPx = with(density) { viewportHeight.toPx() }
+        val contentPx = contentHeightPx.toFloat()
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(verticalScroll)
-                .heightIn(min = viewportHeight),
+                .heightIn(min = viewportHeight)
+                .onSizeChanged { contentHeightPx = it.height },
         ) {
             if (gutterVisible) {
                 LineNumberGutter(lineCount = lineCount, style = monoStyle)
@@ -1141,9 +1160,91 @@ private fun TextEditorBody(
                 )
             }
         }
+
+        // 纵向滚动条：可拖动快速定位；内容不足一屏时自动隐藏
+        if (contentPx > viewportPx + 1f && viewportPx > 0f) {
+            EditorVerticalScrollbar(
+                scrollState = verticalScroll,
+                viewportPx = viewportPx,
+                contentPx = contentPx,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .width(14.dp),
+            )
+        }
     }
 }
 
+/**
+ * 编辑器纵向滚动条。
+ *
+ * 轨道整条可点（点哪跳到哪），滑块可直接拖动；拖动时加粗并加深颜色。
+ * 自己画而不是用系统 Scrollbar，是为了在「输入框撑满视口」的布局里也能贴合内容高度。
+ */
+@Composable
+private fun EditorVerticalScrollbar(
+    scrollState: ScrollState,
+    viewportPx: Float,
+    contentPx: Float,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    var dragging by remember { mutableStateOf(false) }
+    val maxScrollPx = (contentPx - viewportPx).coerceAtLeast(1f)
+    val minThumbPx = with(density) { 36.dp.toPx() }
+    val thumbPx = (viewportPx * viewportPx / contentPx).coerceAtLeast(minThumbPx)
+    val travelPx = (viewportPx - thumbPx).coerceAtLeast(1f)
+    val currentPx = scrollState.value.toFloat().coerceIn(0f, maxScrollPx)
+    val thumbOffsetPx = (currentPx / maxScrollPx) * travelPx
+    val accent = MaterialTheme.colorScheme.onSurfaceVariant
+
+    fun scrollByFraction(fraction: Float) {
+        val target = (fraction.coerceIn(0f, 1f) * maxScrollPx).roundToInt()
+        scope.launch { scrollState.scrollTo(target) }
+    }
+
+    Box(
+        modifier = modifier
+            .pointerInput(maxScrollPx, travelPx) {
+                detectTapGestures { offset ->
+                    val fraction = ((offset.y - thumbPx / 2f) / travelPx).coerceIn(0f, 1f)
+                    scrollByFraction(fraction)
+                }
+            }
+            .pointerInput(maxScrollPx, travelPx) {
+                detectVerticalDragGestures(
+                    onDragStart = { dragging = true },
+                    onDragEnd = { dragging = false },
+                    onDragCancel = { dragging = false },
+                ) { change, dragAmount ->
+                    change.consume()
+                    val deltaScroll = dragAmount / travelPx * maxScrollPx
+                    val target = (scrollState.value + deltaScroll).coerceIn(0f, maxScrollPx)
+                    scope.launch { scrollState.scrollTo(target.roundToInt()) }
+                }
+            }
+            .padding(end = 2.dp),
+        contentAlignment = Alignment.TopEnd,
+    ) {
+        // 轨道
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(3.dp)
+                .background(accent.copy(alpha = 0.16f)),
+        )
+        // 滑块
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(0, thumbOffsetPx.roundToInt()) }
+                .width(if (dragging) 8.dp else 6.dp)
+                .height(with(density) { thumbPx.toDp() })
+                .background(accent.copy(alpha = if (dragging) 0.85f else 0.55f)),
+        )
+    }
+}
 @Composable
 private fun LineNumberGutter(lineCount: Int, style: TextStyle) {
     val numbers = remember(lineCount) { (1..lineCount).joinToString("\n") }
