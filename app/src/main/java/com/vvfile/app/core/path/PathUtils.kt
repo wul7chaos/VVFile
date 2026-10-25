@@ -141,6 +141,29 @@ object PathUtils {
     /** [validateFileName] 的布尔形式，供 UI 输入框即时校验。 */
     fun isValidFileName(name: String): Boolean = runCatching { validateFileName(name) }.isSuccess
 
+    /**
+     * 路径输入的候选范围：拆成「要列哪个目录」+「名字前缀」。
+     *
+     * 末尾是 `/` 时表示「列出这个目录的全部内容」，前缀为空；否则按最后一段做前缀匹配。
+     * 例：`/storage/emu` → (`/storage`, `emu`)；`/sdcard/` → (`/sdcard`, ``)；`abc` → (``, `abc`)。
+     */
+    fun suggestionScope(input: String): Pair<String, String> {
+        val text = input.trim().replace('\\', SEPARATOR)
+        if (text.isEmpty()) return "" to ""
+        if (text == SEPARATOR.toString()) return SEPARATOR.toString() to ""
+        if (text.endsWith(SEPARATOR)) {
+            return text.trimEnd(SEPARATOR).ifEmpty { SEPARATOR.toString() } to ""
+        }
+        val parent = text.substringBeforeLast(SEPARATOR, "")
+        // `/sd` 的父目录是根，不能是空串
+        val directory = if (parent.isEmpty() && text.startsWith(SEPARATOR)) {
+            SEPARATOR.toString()
+        } else {
+            parent
+        }
+        return directory to text.substringAfterLast(SEPARATOR)
+    }
+
     private fun splitPrefix(unified: String): Pair<String, String> {
         if (unified.length >= 2 && unified[0].isLetter() && unified[1] == ':') {
             return unified.substring(0, 2) to unified.substring(2)

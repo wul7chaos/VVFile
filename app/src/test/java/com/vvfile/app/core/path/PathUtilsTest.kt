@@ -229,6 +229,18 @@ class PathUtilsTest {
         assertFalse(PathUtils.isValidFileName("a\u0001b"))
     }
 
+    @Test
+    fun `suggestionScope 把输入拆成目录与前缀`() {
+        assertEquals("/storage" to "emu", PathUtils.suggestionScope("/storage/emu"))
+        assertEquals("/" to "sd", PathUtils.suggestionScope("/sd"))
+        assertEquals("/sdcard" to "", PathUtils.suggestionScope("/sdcard/"))
+        assertEquals("/" to "", PathUtils.suggestionScope("/"))
+        assertEquals("" to "abc", PathUtils.suggestionScope("abc"))
+        assertEquals("" to "", PathUtils.suggestionScope("   "))
+        // 反斜杠按分隔符处理，和路径规范化的约定一致
+        assertEquals("/storage" to "emu", PathUtils.suggestionScope("/storage\\emu"))
+    }
+
     private fun String.escape(): String = buildString {
         for (char in this@escape) {
             if (char.code < 0x20 || char.code == 0x7F) append("\\u%04x".format(char.code)) else append(char)

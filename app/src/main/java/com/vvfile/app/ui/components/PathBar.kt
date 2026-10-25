@@ -1,9 +1,6 @@
 package com.vvfile.app.ui.components
 
 import android.widget.Toast
-import androidx.compose.ui.graphics.RectangleShape
-
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -26,28 +23,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.flow.collect
 
 data class PathSegment(val label: String, val fullPath: String)
 
 /**
- * 面包屑：根目录固定在最左侧（始终可点），其余层级横向滚动。
- * 路径变化后滚动到尾部，保证当前目录可见；深层路径也不会把「/」挤出可视区。
+ * 面包屑：只用于**显示**当前位置，整条点一下就打开路径编辑面板。
+ *
+ * 以前每一段都可点、点哪段跳哪段；但深层路径下小字很容易点错，而且想直接打一串路径
+ * 也没地方输入。现在整条只有一个点击区：点开「跳转」面板改路径（带候选），
+ * 长按仍然复制完整路径。上层目录用底部的「上级」按钮走。
  */
 @Composable
 fun PathBar(
     path: String,
-    onNavigate: (String) -> Unit,
+    onEditPath: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val segments = remember(path) { buildSegments(path) }
@@ -61,22 +61,21 @@ fun PathBar(
         }
     }
     Row(
-        modifier = modifier.pointerInput(path) {
-            detectTapGestures(
-                onLongPress = {
-                    clipboard.setText(AnnotatedString(path))
-                    Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
-                },
-            )
-        },
+        modifier = modifier
+            .semantics { contentDescription = "当前路径，点按编辑" }
+            .pointerInput(path) {
+                detectTapGestures(
+                    onTap = { onEditPath() },
+                    onLongPress = {
+                        clipboard.setText(AnnotatedString(path))
+                        Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
+                    },
+                )
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 根入口不参与滚动，任何深度下都能一键回 "/"
-        PathLabel(
-            label = "/",
-            isCurrent = segments.size == 1,
-            onClick = { onNavigate("/") },
-        )
+        // 根入口不参与滚动，任何深度下都能看到路径是从哪开始的
+        PathLabel(label = "/", isCurrent = segments.size == 1)
         if (segments.size > 1) {
             Box(
                 modifier = Modifier.weight(1f),
@@ -106,7 +105,6 @@ fun PathBar(
                         PathLabel(
                             label = segment.label,
                             isCurrent = index == segments.size - 2,
-                            onClick = { onNavigate(segment.fullPath) },
                         )
                     }
                 }
@@ -133,11 +131,7 @@ fun PathBar(
 }
 
 @Composable
-private fun PathLabel(
-    label: String,
-    isCurrent: Boolean,
-    onClick: () -> Unit,
-) {
+private fun PathLabel(label: String, isCurrent: Boolean) {
     Text(
         text = label,
         style = MaterialTheme.typography.bodyMedium.copy(
@@ -151,10 +145,7 @@ private fun PathLabel(
             MaterialTheme.colorScheme.onSurfaceVariant
         },
         maxLines = 1,
-        modifier = Modifier
-            .clip(RectangleShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 3.dp, vertical = 3.dp),
+        modifier = Modifier.padding(horizontal = 3.dp, vertical = 3.dp),
     )
 }
 
@@ -169,5 +160,3 @@ fun buildSegments(path: String): List<PathSegment> {
     }
     return result
 }
-
-

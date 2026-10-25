@@ -21,6 +21,7 @@ import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 import com.vvfile.app.data.prefs.Settings
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileNotFoundException
 
@@ -439,6 +441,26 @@ class BrowserViewModel : ViewModel() {
         _state.update { if (it.message == null) it else it.copy(message = null) }
     }
 
+    /**
+     * 路径输入的候选：把输入拆成「所在目录 + 名字前缀」，列出该目录下匹配的条目。
+     *
+     * 目录候选带尾斜杠，便于继续往里输入；列不出内容（目录不存在/无权限）时返回空，
+     * 交给面板只显示提示文案。
+     */
+    suspend fun suggestPaths(input: String): List<String> = withContext(Dispatchers.IO) {
+        val (directory, prefix) = PathUtils.suggestionScope(input)
+        val target = directory.ifEmpty { "/" }
+        val entries = runCatching { repository.list(target, _state.value.showHidden) }
+            .getOrNull()
+            ?: return@withContext emptyList()
+        entries.asSequence()
+            .filter { prefix.isEmpty() || it.name.startsWith(prefix, ignoreCase = true) }
+            .sortedBy { it.name.lowercase() }
+            .map { if (it.isDirectory) "${it.path}/" else it.path }
+            .take(SUGGESTION_LIMIT)
+            .toList()
+    }
+
     /** 批量改权限：逐条应用同一个模式，最后汇总一条提示。 */
     fun changePermissions(paths: List<String>, mode: String) {
         if (isBusy()) return notifyBusy()
@@ -783,6 +805,9 @@ class BrowserViewModel : ViewModel() {
 
         /** 批量重命名「批内互换」时的临时名前缀：点开头，且带序号，避免撞车。 */
         const val STAGING_PREFIX = ".vvrename_"
+
+        /** 路径候选最多列几条。 */
+        const val SUGGESTION_LIMIT = 12
     }
 }
 

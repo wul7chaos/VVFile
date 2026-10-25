@@ -123,6 +123,7 @@ import com.vvfile.app.data.prefs.PrefsRepository
 import com.vvfile.app.feature.media.MediaFormats
 import com.vvfile.app.data.prefs.Settings as AppSettings
 import com.vvfile.app.ui.components.PathBar
+import com.vvfile.app.ui.components.PathInputDialog
 import com.vvfile.app.ui.theme.VVDanger
 import com.vvfile.app.ui.theme.VVWarn
 import java.io.File
@@ -145,6 +146,7 @@ fun BrowserScreen(
     var showAbout by remember { mutableStateOf(false) }
     var properties by remember { mutableStateOf<FileProperties?>(null) }
     var showFilter by remember { mutableStateOf(false) }
+    var showPathInput by remember { mutableStateOf(false) }
     var showUnzipTo by remember { mutableStateOf(false) }
     var aggregate by remember { mutableStateOf<AggregateProperties?>(null) }
     var chmodRequest by remember { mutableStateOf<ChmodRequest?>(null) }
@@ -344,7 +346,7 @@ fun BrowserScreen(
             BrowserBreadcrumbBar(
                 pane = activePane,
                 sort = state.sort,
-                onNavigate = { path -> viewModel.navigate(state.active, path) },
+                onEditPath = { showPathInput = true },
                 onSort = viewModel::setSort,
                 onFilter = { showFilter = true },
                 onRefresh = { viewModel.refresh(state.active) },
@@ -678,6 +680,18 @@ fun BrowserScreen(
         )
     }
 
+    if (showPathInput) {
+        PathInputDialog(
+            currentPath = activePane.path,
+            onConfirm = { path ->
+                showPathInput = false
+                if (path != activePane.path) viewModel.navigate(state.active, path)
+            },
+            onDismiss = { showPathInput = false },
+            suggest = { query -> viewModel.suggestPaths(query) },
+        )
+    }
+
     if (showFilter) {
         FilterDialog(
             initialQuery = activePane.filterQuery,
@@ -911,7 +925,7 @@ private fun SelectionTopBar(
 private fun BrowserBreadcrumbBar(
     pane: PaneState,
     sort: SortSpec,
-    onNavigate: (String) -> Unit,
+    onEditPath: () -> Unit,
     onSort: (SortField) -> Unit,
     onFilter: () -> Unit,
     onRefresh: () -> Unit,
@@ -926,23 +940,8 @@ private fun BrowserBreadcrumbBar(
     ) {
         PathBar(
             path = pane.path,
-            onNavigate = onNavigate,
+            onEditPath = onEditPath,
             modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = if (pane.selectionMode) {
-                "${pane.selected.size}/${pane.visibleEntries.size}"
-            } else {
-                "${pane.visibleEntries.size}"
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = if (pane.selectionMode) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            maxLines = 1,
-            modifier = Modifier.padding(start = 6.dp),
         )
         Box {
             IconButton(onClick = onFilter) {
