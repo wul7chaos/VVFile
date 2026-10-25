@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -57,7 +58,9 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.vvfile.app.core.format.SizeFormatter
+import kotlinx.coroutines.launch
 import java.io.File
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -78,6 +81,7 @@ fun ImageViewerScreen(
     val playlist = remember(path) { MediaLibrary.playlist(path) }
     val startIndex = remember(path, playlist) { MediaFormats.indexOf(playlist, path) }
     val pagerState = rememberPagerState(initialPage = startIndex) { playlist.size }
+    val scope = rememberCoroutineScope()
     var zoomed by remember { mutableStateOf(false) }
     var barsVisible by remember { mutableStateOf(true) }
     val currentPath = playlist.getOrElse(pagerState.currentPage) { path }
@@ -108,6 +112,12 @@ fun ImageViewerScreen(
                 path = playlist.getOrElse(page) { path },
                 onZoomChange = { zoomed = it },
                 onTap = { barsVisible = !barsVisible },
+                onVerticalSwipe = { delta ->
+                    val target = pagerState.currentPage + delta
+                    if (target in 0 until playlist.size) {
+                        scope.launch { pagerState.animateScrollToPage(target) }
+                    }
+                },
             )
         }
 
@@ -166,6 +176,7 @@ private fun ZoomableImage(
     path: String,
     onZoomChange: (Boolean) -> Unit,
     onTap: () -> Unit,
+    onVerticalSwipe: (Int) -> Unit,
 ) {
     var image by remember(path) { mutableStateOf<LoadedImage?>(null) }
     var failed by remember(path) { mutableStateOf(false) }
@@ -195,26 +206,37 @@ private fun ZoomableImage(
             .fillMaxSize()
             .onSizeChanged { container = it }
             .pointerInput(path) {
-                // 只在「双指」或「已放大」时消费手势；否则把横向滑动让给 Pager 翻页
+                // 单指竖向滑动翻上一张/下一张；双指或已放大时改为缩放/平移并消费手势
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
+                    var dragY = 0f
+                    var dragX = 0f
                     do {
                         val event = awaitPointerEvent()
                         val pressed = event.changes.count { it.pressed }
+                        val pan = event.calculatePan()
                         if (pressed >= 2) {
                             val next = (scale * event.calculateZoom()).coerceIn(1f, 8f)
                             scale = next
                             offset = if (next <= 1f) {
                                 Offset.Zero
                             } else {
-                                clamp(offset + event.calculatePan(), next)
+                                clamp(offset + pan, next)
                             }
                             event.changes.forEach { it.consume() }
                         } else if (scale > 1.01f) {
-                            offset = clamp(offset + event.calculatePan(), scale)
+                            offset = clamp(offset + pan, scale)
                             event.changes.forEach { it.consume() }
+                        } else {
+                            dragY += pan.y
+                            dragX += pan.x
                         }
                     } while (event.changes.any { it.pressed })
+                    val threshold = 72.dp.toPx()
+                    if (scale <= 1.01f && abs(dragY) > threshold && abs(dragY) > abs(dragX)) {
+                        // 上滑看下一张，下滑回上一张
+                        onVerticalSwipe(if (dragY < 0) 1 else -1)
+                    }
                 }
             }
             .pointerInput(path) {

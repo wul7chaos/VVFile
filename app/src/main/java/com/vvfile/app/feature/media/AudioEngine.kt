@@ -163,6 +163,38 @@ object AudioEngine {
         _state.update { it.copy(repeatMode = next) }
     }
 
+    /**
+     * 播放模式按钮：列表循环 → 单曲循环 → 随机 → 不循环。
+     *
+     * 随机只打乱当前队列（即目标文件所在目录里的同类型文件），不会跨目录取歌。
+     */
+    fun cyclePlayMode() {
+        val player = controller ?: return
+        val current = _state.value
+        when {
+            current.shuffle -> {
+                player.shuffleModeEnabled = false
+                player.repeatMode = MediaFormats.REPEAT_OFF
+            }
+            current.repeatMode == MediaFormats.REPEAT_ALL -> {
+                player.repeatMode = MediaFormats.REPEAT_ONE
+            }
+            current.repeatMode == MediaFormats.REPEAT_ONE -> {
+                player.shuffleModeEnabled = true
+                player.repeatMode = MediaFormats.REPEAT_ALL
+            }
+            else -> {
+                player.repeatMode = MediaFormats.REPEAT_ALL
+            }
+        }
+        _state.update {
+            it.copy(
+                repeatMode = player.repeatMode,
+                shuffle = player.shuffleModeEnabled,
+            )
+        }
+    }
+
     fun toggleShuffle() {
         val player = controller ?: return
         player.shuffleModeEnabled = !player.shuffleModeEnabled

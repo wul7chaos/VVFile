@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.RepeatOne
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -196,18 +197,22 @@ fun AudioPlayerPanel(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
-                    IconButton(onClick = AudioEngine::cycleRepeat) {
+                    IconButton(onClick = AudioEngine::cyclePlayMode) {
                         Icon(
-                            imageVector = if (state.repeatMode == MediaFormats.REPEAT_ONE) {
-                                Icons.Outlined.RepeatOne
-                            } else {
-                                Icons.Outlined.Repeat
+                            imageVector = when {
+                                state.shuffle -> Icons.Outlined.Shuffle
+                                state.repeatMode == MediaFormats.REPEAT_ONE -> Icons.Outlined.RepeatOne
+                                else -> Icons.Outlined.Repeat
                             },
-                            contentDescription = MediaFormats.repeatLabel(state.repeatMode),
-                            tint = if (state.repeatMode == MediaFormats.REPEAT_OFF) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                            contentDescription = if (state.shuffle) {
+                                "随机播放（同目录）"
                             } else {
+                                MediaFormats.repeatLabel(state.repeatMode)
+                            },
+                            tint = if (state.shuffle || state.repeatMode != MediaFormats.REPEAT_OFF) {
                                 MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
                             },
                         )
                     }
