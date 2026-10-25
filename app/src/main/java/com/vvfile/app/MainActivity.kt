@@ -1,13 +1,18 @@
 package com.vvfile.app
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,9 +21,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -32,6 +39,13 @@ import com.vvfile.app.data.prefs.ThemeMode
 import com.vvfile.app.feature.apps.AppListScreen
 import com.vvfile.app.feature.browser.BrowserScreen
 import com.vvfile.app.feature.editor.EditorScreen
+import com.vvfile.app.feature.media.AudioEngine
+import com.vvfile.app.feature.media.AudioMiniBar
+import com.vvfile.app.feature.media.AudioPlayerPanel
+import com.vvfile.app.feature.media.ImageViewerScreen
+import com.vvfile.app.feature.media.MediaFormats
+import com.vvfile.app.feature.media.MediaKind
+import com.vvfile.app.feature.media.VideoPlayerScreen
 import com.vvfile.app.feature.settings.SettingsScreen
 import com.vvfile.app.feature.terminal.TerminalScreen
 import com.vvfile.app.ui.theme.AccentPresets
@@ -78,22 +92,57 @@ class MainActivity : ComponentActivity() {
                 var showSettings by remember { mutableStateOf(false) }
                 var showTerminal by remember { mutableStateOf(false) }
                 var showApps by remember { mutableStateOf(false) }
+                // 内置播放器：音频走可最小化的面板，视频/图片整页覆盖
+                var audioPath by remember { mutableStateOf<String?>(null) }
+                var audioMinimized by remember { mutableStateOf(false) }
+                var videoPath by remember { mutableStateOf<String?>(null) }
+                var imagePath by remember { mutableStateOf<String?>(null) }
                 // 「应用信息」点数据目录后带到浏览器的目标路径
                 var browseTarget by remember { mutableStateOf<String?>(null) }
+
+                val notificationPermission = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission(),
+                ) { }
+
+                fun ensureNotificationPermission() {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (!granted) {
+                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
 
                 Box(Modifier.fillMaxSize()) {
                     BrowserScreen(
                         navigateTo = browseTarget,
                         onNavigateHandled = { browseTarget = null },
                         onOpenFile = { path ->
-                            if (MimeTypes.isText(path)) {
-                                editingPath = path
-                            } else if (!FileOpener.open(this@MainActivity, path)) {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "没有可打开该文件的应用",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
+                            when (MediaFormats.kindOf(path)) {
+                                MediaKind.AUDIO -> {
+                                    ensureNotificationPermission()
+                                    audioPath = path
+                                    audioMinimized = false
+                                }
+                                MediaKind.VIDEO -> {
+                                    // 看视频时把后台音频收住，避免两个声音叠在一起
+                                    if (AudioEngine.state.value.playing) {
+                                        AudioEngine.togglePlayPause()
+                                    }
+                                    videoPath = path
+                                }
+                                MediaKind.IMAGE -> imagePath = path
+                                null -> if (MimeTypes.isText(path)) {
+                                    editingPath = path
+                                } else if (!FileOpener.open(this@MainActivity, path)) {
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "没有可打开该文件的应用",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
                             }
                         },
                         onToolClick = { tool ->
@@ -157,6 +206,37 @@ class MainActivity : ComponentActivity() {
                                 browseTarget = path
                             },
                         )
+                    }
+
+                    // 音频面板：最小化后换成底部的迷你条，播放本身在服务里继续
+                    val playingAudio = audioPath
+                    if (playingAudio != null && !audioMinimized) {
+                        AudioPlayerPanel(
+                            path = playingAudio,
+                            onMinimize = { audioMinimized = true },
+                            onClose = {
+                                audioPath = null
+                                audioMinimized = false
+                            },
+                        )
+                    }
+                    if (playingAudio != null && audioMinimized) {
+                        AudioMiniBar(
+                            onExpand = { audioMinimized = false },
+                            onClose = {
+                                audioPath = null
+                                audioMinimized = false
+                            },
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
+
+                    imagePath?.let { path ->
+                        ImageViewerScreen(path = path, onClose = { imagePath = null })
+                    }
+
+                    videoPath?.let { path ->
+                        VideoPlayerScreen(path = path, onClose = { videoPath = null })
                     }
                 }
             }

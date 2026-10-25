@@ -18,6 +18,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -39,9 +43,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
 import com.vvfile.app.core.format.MimeTypes
 import com.vvfile.app.core.share.FileSharer
+import com.vvfile.app.feature.media.MediaFormats
+import com.vvfile.app.feature.media.MediaKind
 
 /**
- * 「打开方式」：内置（编辑文本）+ 系统里能处理该类型的应用。
+ * 「打开方式」：内置（编辑文本 / 播放器 / 图片查看器）+ 系统里能处理该类型的应用。
  *
  * 按需求不做十六进制 / xml / dex / arsc / apk / apks / 查看字体 / 导入签名 /
  * 插件信息 / .9 编辑 / jar / class / 对比结果这些内置查看器。
@@ -52,10 +58,24 @@ fun OpenWithDialog(
     fileName: String,
     onEditText: (() -> Unit)?,
     onDismiss: () -> Unit,
+    onOpenInternal: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val targets = remember(path) { FileSharer.resolveOpenWith(context, path) }
     val mime = remember(path) { MimeTypes.forPath(path) }
+    val kind = remember(path) { MediaFormats.kindOf(path) }
+    val internalLabel = when (kind) {
+        MediaKind.AUDIO -> "内置播放器"
+        MediaKind.VIDEO -> "内置视频播放器"
+        MediaKind.IMAGE -> "内置图片查看器"
+        null -> "内置查看器"
+    }
+    val internalSubtitle = when (kind) {
+        MediaKind.AUDIO -> "支持后台播放与通知栏控制"
+        MediaKind.VIDEO -> "内置视频播放，支持倍速与字幕"
+        MediaKind.IMAGE -> "支持缩放、滑动切换"
+        null -> "VVFile 内置"
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -83,6 +103,28 @@ fun OpenWithDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 Column(Modifier.verticalScroll(rememberScrollState())) {
+                    if (onOpenInternal != null) {
+                        OpenWithRow(
+                            label = internalLabel,
+                            subtitle = internalSubtitle,
+                            icon = {
+                                Icon(
+                                    imageVector = when (kind) {
+                                        MediaKind.AUDIO -> Icons.Outlined.MusicNote
+                                        MediaKind.VIDEO -> Icons.Outlined.Movie
+                                        MediaKind.IMAGE -> Icons.Outlined.Image
+                                        null -> Icons.Outlined.PlayCircle
+                                    },
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            },
+                            onClick = {
+                                onDismiss()
+                                onOpenInternal()
+                            },
+                        )
+                    }
                     if (onEditText != null) {
                         OpenWithRow(
                             label = "编辑文本",
@@ -130,7 +172,7 @@ fun OpenWithDialog(
                             },
                         )
                     }
-                    if (targets.isEmpty() && onEditText == null) {
+                    if (targets.isEmpty() && onEditText == null && onOpenInternal == null) {
                         Text(
                             text = "没有可用的打开方式（$mime）",
                             fontSize = 12.sp,

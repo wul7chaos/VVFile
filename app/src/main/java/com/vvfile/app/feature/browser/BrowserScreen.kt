@@ -118,6 +118,7 @@ import com.vvfile.app.core.share.FileSharer
 import com.vvfile.app.data.file.FileProperties
 import com.vvfile.app.data.file.FilePropertyReader
 import com.vvfile.app.data.prefs.PrefsRepository
+import com.vvfile.app.feature.media.MediaFormats
 import com.vvfile.app.data.prefs.Settings as AppSettings
 import com.vvfile.app.ui.components.PathBar
 import com.vvfile.app.ui.theme.VVDanger
@@ -530,6 +531,11 @@ fun BrowserScreen(
                 null
             },
             onDismiss = { openWithTarget = null },
+            onOpenInternal = if (MediaFormats.isMedia(entry.path)) {
+                { onOpenFile?.invoke(entry.path) }
+            } else {
+                null
+            },
         )
     }
 
