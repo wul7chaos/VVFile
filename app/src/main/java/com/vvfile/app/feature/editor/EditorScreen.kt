@@ -154,7 +154,10 @@ private fun EditorScreenContent(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var fieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+    // 不能用 rememberSaveable：文本可能有几百 KB，写进 Bundle 会直接
+    // TransactionTooLargeException（大文件一旋转/切后台就崩）。正文本来就在 ViewModel 里，
+    // 配置变更后由下面的 LaunchedEffect 重新灌进来即可。
+    var fieldValue by remember(state.path) {
         mutableStateOf(TextFieldValue(""))
     }
 
@@ -250,6 +253,8 @@ internal fun EditorContent(
     var showSaveAs by remember { mutableStateOf(false) }
     var showStats by remember { mutableStateOf(false) }
     var showGoto by remember { mutableStateOf(false) }
+    // 大文件查看器当前停在第一行的行号（从 0 开始）与总行数，供状态栏显示。
+    var readerPosition by remember(state.path) { mutableStateOf<Pair<Int, Int>?>(null) }
     var layout by rememberSaveable(state.path) { mutableStateOf(PreviewLayout.SPLIT) }
     var gotoLineText by rememberSaveable { mutableStateOf("") }
     val matches = remember(fieldValue.text, query, matchCase, wholeWord) {
@@ -388,7 +393,10 @@ internal fun EditorContent(
         val previewKind = remember(state.path) { PreviewKind.of(state.path) }
         val darkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
         val showEditor = previewKind == PreviewKind.NONE || layout != PreviewLayout.PREVIEW_ONLY
-        val showPreview = previewKind != PreviewKind.NONE && layout != PreviewLayout.EDIT_ONLY
+        // 大文件不渲染 HTML/Markdown 预览：同样是整段文本一次排版，代价一样。
+        val showPreview = previewKind != PreviewKind.NONE &&
+            layout != PreviewLayout.EDIT_ONLY &&
+            !state.isLargeText
 
         Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (showEditor) {
@@ -405,17 +413,30 @@ internal fun EditorContent(
                             state.error?.let { message ->
                                 ErrorBanner(message = message, onDismiss = onDismissError)
                             }
-                            TextEditorBody(
-                                value = fieldValue,
-                                onValueChange = onValueChange,
-                                readOnly = state.editingBlocked,
-                                wrap = state.wrap,
-                                path = state.path,
-                                highlight = state.highlight,
-                                showLineNumbers = showLineNumbers,
-                                fontSizeSp = fontSizeSp,
-                                modifier = Modifier.weight(1f),
-                            )
+                            if (state.isLargeText) {
+                                // 几十万字符塞进一个 BasicTextField 会让主线程卡十几秒甚至 OOM，
+                                // 大文件一律走按行虚拟化的只读查看器。
+                                LargeTextReader(
+                                    text = state.text,
+                                    truncated = state.truncated,
+                                    showLineNumbers = showLineNumbers,
+                                    fontSizeSp = fontSizeSp,
+                                    modifier = Modifier.weight(1f),
+                                    onPosition = { first, total -> readerPosition = first to total },
+                                )
+                            } else {
+                                TextEditorBody(
+                                    value = fieldValue,
+                                    onValueChange = onValueChange,
+                                    readOnly = state.editingBlocked,
+                                    wrap = state.wrap,
+                                    path = state.path,
+                                    highlight = state.highlight,
+                                    showLineNumbers = showLineNumbers,
+                                    fontSizeSp = fontSizeSp,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
                         }
                     }
                 }
@@ -432,7 +453,7 @@ internal fun EditorContent(
                 )
             }
         }
-        if (searchVisible) {
+        if (searchVisible && !state.isLargeText) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             EditorSearchBar(
                 query = query,
@@ -474,7 +495,7 @@ internal fun EditorContent(
                 onClose = { searchVisible = false },
             )
         }
-        EditorStatusBar(state = state, fieldValue = fieldValue)
+        EditorStatusBar(state = state, fieldValue = fieldValue, readerPosition = readerPosition)
     }
 
     if (showSaveAs) {
@@ -985,6 +1006,8 @@ private fun EditorTopBar(
                 }
                 DropdownMenuItem(
                     text = { Text("搜索", fontSize = 13.sp) },
+                    // 大文件走分行虚拟化查看器，查找面板基于整段文本做高亮，用不上。
+                    enabled = !state.isLargeText,
                     onClick = {
                         moreMenu = false
                         onSearch()
@@ -992,6 +1015,8 @@ private fun EditorTopBar(
                 )
                 DropdownMenuItem(
                     text = { Text("转到指定行", fontSize = 13.sp) },
+                    // 大文件的正文是虚拟化列表，这里跳不动；查看器顶部有自己的「跳转行」。
+                    enabled = !state.isLargeText,
                     onClick = {
                         moreMenu = false
                         onGotoLine()
@@ -1345,11 +1370,28 @@ private fun LineNumberGutter(lineCount: Int, style: TextStyle) {
 }
 
 @Composable
-private fun EditorStatusBar(state: EditorUiState, fieldValue: TextFieldValue) {
-    val offset = fieldValue.selection.end.coerceIn(0, fieldValue.text.length)
-    val beforeCursor = fieldValue.text.substring(0, offset)
-    val line = beforeCursor.count { it == '\n' } + 1
-    val column = offset - (beforeCursor.lastIndexOf('\n') + 1) + 1
+private fun EditorStatusBar(
+    state: EditorUiState,
+    fieldValue: TextFieldValue,
+    readerPosition: Pair<Int, Int>? = null,
+) {
+    // 大文件不能算光标位置：[fieldValue] 装的是整篇文本，substring + count 每次重组都跑一遍，
+    // 几十万字符就是几百毫秒。查看器模式下用它的可见行号代替。
+    var line = 1
+    var column = 1
+    var positionText: String? = null
+    if (readerPosition != null) {
+        positionText = stringResource(
+            R.string.editor_large_position,
+            readerPosition.first + 1,
+            readerPosition.second,
+        )
+    } else if (fieldValue.text.length <= 50_000) {
+        val offset = fieldValue.selection.end.coerceIn(0, fieldValue.text.length)
+        val beforeCursor = fieldValue.text.substring(0, offset)
+        line = beforeCursor.count { it == '\n' } + 1
+        column = offset - (beforeCursor.lastIndexOf('\n') + 1) + 1
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1374,7 +1416,7 @@ private fun EditorStatusBar(state: EditorUiState, fieldValue: TextFieldValue) {
         }
         Spacer(Modifier.weight(1f))
         Text(
-            text = stringResource(R.string.editor_status_position, line, column),
+            text = positionText ?: stringResource(R.string.editor_status_position, line, column),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

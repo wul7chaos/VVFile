@@ -46,6 +46,12 @@ data class EditorUiState(
 
     val charCount: Int get() = text.length
 
+    /**
+     * 文本太大，正文改用按行虚拟化的只读查看器（[LargeTextReader]），
+     * 不再塞进单个 `BasicTextField`。阈值见 [EditorFileGateway.LARGE_TEXT_CHARS]。
+     */
+    val isLargeText: Boolean get() = text.length > EditorFileGateway.LARGE_TEXT_CHARS
+
     val lineCount: Int get() = if (text.isEmpty()) 1 else text.count { it == '\n' } + 1
 
     /** 只读 = 截断预览 或 手动只读。 */

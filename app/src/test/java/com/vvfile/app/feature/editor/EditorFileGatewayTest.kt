@@ -88,22 +88,36 @@ class EditorFileGatewayTest {
     }
 
     @Test
-    fun `large file is truncated to preview and marked read only`() = runBlocking {
+    fun `large file is read only but loaded in full`() = runBlocking {
         val total = 6 * 1024 * 1024
         val file = newFile("big.log", ByteArray(total) { 'a'.code.toByte() })
 
         val document = gateway.read(file.absolutePath)
 
-        assertTrue(document.truncated)
+        // 6 MB 超过可编辑上限（只读），但没超过读取上限（不截断）
         assertTrue(document.readOnly)
-        assertEquals(EditorFileGateway.PREVIEW_BYTES.toInt(), document.text.length)
+        assertFalse(document.truncated)
+        assertEquals(total, document.text.length)
         assertEquals('a', document.text.first())
+    }
+
+    @Test
+    fun `beyond load cap is truncated`() = runBlocking {
+        val total = EditorFileGateway.MAX_LOAD_BYTES.toInt() + 4096
+        val file = newFile("huge.log", ByteArray(total) { 'a'.code.toByte() })
+
+        val document = gateway.read(file.absolutePath)
+
+        assertTrue(document.readOnly)
+        assertTrue(document.truncated)
+        assertEquals(EditorFileGateway.MAX_LOAD_BYTES.toInt(), document.text.length)
     }
 
     @Test
     fun `truncation keeps multibyte characters intact`() = runBlocking {
         val unit = "中".toByteArray(Charsets.UTF_8)
-        val count = 2_000_000 // 6 MB，超过 5 MB 阈值
+        val limitBytes = EditorFileGateway.MAX_LOAD_BYTES.toInt()
+        val count = limitBytes / unit.size + 2
         val bytes = ByteArray(count * unit.size)
         for (index in 0 until count) {
             System.arraycopy(unit, 0, bytes, index * unit.size, unit.size)
@@ -114,8 +128,8 @@ class EditorFileGatewayTest {
 
         assertEquals(TextEncoding.UTF_8, document.encoding)
         assertTrue(document.truncated)
-        // 2 MB 截断点落在汉字中间，末尾半个字符被丢弃，其余字符保持完整
-        assertEquals(EditorFileGateway.PREVIEW_BYTES.toInt() / 3, document.text.length)
+        // 截断点落在汉字中间，末尾半个字符被丢弃，其余字符保持完整
+        assertEquals(limitBytes / 3, document.text.length)
         assertTrue(document.text.all { it == '中' })
     }
 

@@ -31,17 +31,18 @@ enum class TextEncoding(
 /**
  * 一次打开的结果。
  *
- * [truncated] 为 true 表示文件超过 [EditorFileGateway.MAX_EDITABLE_BYTES]，
- * 只读取了前 [EditorFileGateway.PREVIEW_BYTES] 作为预览，此时 [readOnly] 为 true，
- * 保存必须被拒绝，避免把截断后的内容覆盖回原文件。
+ * [readOnly] 为 true 表示文件超过 [EditorFileGateway.MAX_EDITABLE_BYTES]，不允许保存
+ * （避免把截断后的内容覆盖回原文件，也避免编辑器在超大文本上卡死）。
+ *
+ * [truncated] 为 true 表示文件还超过了 [EditorFileGateway.MAX_LOAD_BYTES]，
+ * 只读了前 [EditorFileGateway.MAX_LOAD_BYTES] 字节。
  */
 data class EditorDocument(
     val text: String,
     val encoding: TextEncoding,
     val truncated: Boolean = false,
-) {
-    val readOnly: Boolean get() = truncated
-}
+    val readOnly: Boolean = false,
+)
 
 /** 编辑器领域异常：message 直接是给用户看的文案。 */
 class EditorException(
@@ -66,15 +67,20 @@ class EditorFileGateway(
         try {
             if (Files.isDirectory(file)) throw EditorException(MSG_IS_DIRECTORY)
             val size = Files.size(file)
-            val truncated = size > MAX_EDITABLE_BYTES
-            val limit = if (truncated) PREVIEW_BYTES else size
+            // 两个门槛是分开的：
+            // - readOnly：超过 5 MB 就不允许保存（编辑器不适合改这么大的文本）；
+            // - truncated：超过 16 MB 只读前 16 MB，避免把整个文件读进内存。
+            // 大文件用「按行虚拟化的只读查看器」显示（见 LargeTextReader），秒开、可滚动。
+            val readOnly = size > MAX_EDITABLE_BYTES
+            val truncated = size > MAX_LOAD_BYTES
+            val limit = if (truncated) MAX_LOAD_BYTES else size
             val bytes = readPrefix(file, limit)
             val (encoding, text) = if (forced != null) {
                 forced to String(bytes, forced.charset)
             } else {
                 decode(bytes, truncated)
             }
-            EditorDocument(text = text, encoding = encoding, truncated = truncated)
+            EditorDocument(text = text, encoding = encoding, truncated = truncated, readOnly = readOnly)
         } catch (known: EditorException) {
             throw known
         } catch (missing: NoSuchFileException) {
@@ -245,11 +251,19 @@ class EditorFileGateway(
     }
 
     companion object {
-        /** 超过该大小只做只读预览。 */
+        /** 超过该大小就不允许保存（只读打开）。 */
         const val MAX_EDITABLE_BYTES: Long = 5L * 1024 * 1024
 
-        /** 只读预览时实际读取的字节数。 */
-        const val PREVIEW_BYTES: Long = 2L * 1024 * 1024
+        /** 真正的读取上限：超过则只读前这么多字节。 */
+        const val MAX_LOAD_BYTES: Long = 16L * 1024 * 1024
+
+        /**
+         * 超过这个字符数就改用「按行虚拟化的只读查看器」。
+         *
+         * 单个 Text/BasicTextField 渲染几十万字符会让主线程卡住十几秒、并且随时可能 OOM，
+         * 所以 200k 字符（约 400 KB 中文）以上一律走虚拟化路径。
+         */
+        const val LARGE_TEXT_CHARS: Int = 200_000
 
         private const val DEFAULT_BUFFER_SIZE = 64 * 1024
 
