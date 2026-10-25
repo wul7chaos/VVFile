@@ -100,6 +100,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.vvfile.app.BuildConfig
 import com.vvfile.app.R
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictPolicy
@@ -1036,10 +1037,11 @@ private fun AboutDialog(onDismiss: () -> Unit) {
         title = { Text("关于 VVFile") },
         text = {
             Text(
-                "VVFile 0.1.0（M0）\n\n" +
-                    "专注本地文件管理：双窗格浏览、排序、隐藏文件、存储信息。\n" +
+                "VVFile ${BuildConfig.VERSION_NAME}\n\n" +
+                    "专注本地文件管理：双窗格浏览、批量选择、复制/移动/删除/重命名、\n" +
+                    "压缩与解压、root 系统分区读写、终端模拟器、文本编辑器。\n" +
                     "不包含 APK 修改、会员、插件、回收站、MCP 等功能。\n\n" +
-                    "后续里程碑：文件操作 → root 与系统分区 → 终端 / 编辑器 / 应用管理。",
+                    "root 能力仅依赖设备上的 su，不接入 Shizuku / ADB。",
             )
         },
         confirmButton = {

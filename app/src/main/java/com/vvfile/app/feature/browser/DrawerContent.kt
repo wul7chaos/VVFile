@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vvfile.app.BuildConfig
 import com.vvfile.app.ui.components.StorageCard
 
 @Composable
@@ -86,7 +87,7 @@ fun DrawerContent(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "v0.1.0 · Android ${Build.VERSION.RELEASE}",
+                        text = "v${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
