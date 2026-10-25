@@ -1,5 +1,6 @@
 package com.vvfile.app.data.file
 
+import android.os.Environment
 import android.os.StatFs
 import com.vvfile.app.core.io.FileSystem
 import com.vvfile.app.core.io.NioFileSystem
@@ -27,8 +28,34 @@ class FileRepository(
 
     fun exists(path: String): Boolean = fileSystem.exists(path)
 
+    /**
+     * 容量卡片数据。
+     *
+     * 先在「当前路径所属的卷」上取；命中虚拟挂载点（`/storage`、`/proc` 等）时由
+     * [StorageVolumes] 换成共享存储根，避免把 tmpfs 的 7.4 GB 当成内部存储；
+     * 全部失败再依次退到共享存储、`/data`，保证卡片不空白。
+     */
     suspend fun storageStats(path: String): StorageStats = withContext(Dispatchers.IO) {
-        val stat = StatFs(path)
-        StorageStats(totalBytes = stat.totalBytes, availableBytes = stat.availableBytes)
+        val sharedRoot = runCatching {
+            Environment.getExternalStorageDirectory()?.absolutePath.orEmpty()
+        }.getOrDefault("")
+        val target = StorageVolumes.resolve(path, sharedRoot)
+
+        fun read(candidate: String): StorageStats? {
+            if (candidate.isBlank()) return null
+            return runCatching {
+                val stat = StatFs(candidate)
+                StorageStats(totalBytes = stat.totalBytes, availableBytes = stat.availableBytes)
+            }.getOrNull()?.takeIf { it.totalBytes > 0 }
+        }
+
+        read(target)
+            ?: read(sharedRoot)
+            ?: read(DATA_ROOT)
+            ?: StorageStats(totalBytes = 0, availableBytes = 0)
+    }
+
+    private companion object {
+        private const val DATA_ROOT = "/data"
     }
 }

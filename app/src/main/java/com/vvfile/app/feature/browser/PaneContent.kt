@@ -2,6 +2,8 @@ package com.vvfile.app.feature.browser
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -35,15 +37,22 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +61,7 @@ import androidx.compose.ui.unit.sp
 import com.vvfile.app.R
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.ui.components.FileRow
+import kotlin.math.abs
 
 /**
  * 单个窗格：列表 + 加载/空/错误态。
@@ -120,25 +130,45 @@ fun PaneContent(
             }
         }
 
-        val pullState = rememberPullToRefreshState()
-        PullToRefreshBox(
-            isRefreshing = pane.refreshing,
-            onRefresh = onPullRefresh,
-            state = pullState,
+        // 下拉刷新：不依赖列表能否滚动，自己观察拖拽（只在列表已到顶时累计向下位移）。
+        // 之前用 PullToRefreshBox，条目少的目录里列表不可滚动、收不到手势，整个区域都刷不了。
+        val thresholdPx = with(LocalDensity.current) { PULL_THRESHOLD.toPx() }
+        var pullOffset by remember { mutableFloatStateOf(0f) }
+        var dragging by remember { mutableStateOf(false) }
+        val fraction = (pullOffset / thresholdPx).coerceIn(0f, 1f)
+
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
-            indicator = {
-                val fraction = pullState.distanceFraction.coerceIn(0f, 1f)
-                if (pane.refreshing || fraction > 0.02f) {
-                    PullHint(
-                        fraction = fraction,
-                        refreshing = pane.refreshing,
-                        accent = accent,
-                        modifier = Modifier.align(Alignment.TopCenter),
-                    )
-                }
-            },
+                .fillMaxWidth()
+                .pointerInput(pane.path, pane.refreshing) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var sumY = 0f
+                        var sumX = 0f
+                        dragging = true
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (change.changedToUpIgnoreConsumed()) break
+                            val dy = change.positionChange().y
+                            val dx = change.positionChange().x
+                            sumX += dx
+                            if (dy > 0f && !listState.canScrollBackward) {
+                                sumY += dy
+                                pullOffset = sumY
+                            } else if (dy < 0f) {
+                                // 往上滑说明是在滚列表，撤销本次下拉累计
+                                sumY = 0f
+                                pullOffset = 0f
+                            }
+                        }
+                        dragging = false
+                        val armed = sumY >= thresholdPx && abs(sumY) > abs(sumX)
+                        pullOffset = 0f
+                        if (armed && !pane.refreshing) onPullRefresh()
+                    }
+                },
         ) {
             Box(Modifier.fillMaxSize()) {
                 when {
@@ -170,7 +200,7 @@ fun PaneContent(
                         }
                     }
                 }
-                // 下拉刷新自己会画顶部细线，别叠两条
+                // 普通刷新的细线只在下拉刷新没接管时显示，避免叠两条
                 if (pane.loading && pane.entries.isNotEmpty() && !pane.refreshing) {
                     LinearProgressIndicator(
                         modifier = Modifier
@@ -182,9 +212,21 @@ fun PaneContent(
                     )
                 }
             }
+
+            if (pane.refreshing || (dragging && fraction > 0.02f)) {
+                PullHint(
+                    fraction = if (pane.refreshing) 1f else fraction,
+                    refreshing = pane.refreshing,
+                    accent = accent,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            }
         }
     }
 }
+
+/** 触发下拉刷新需要的下拉距离。 */
+private val PULL_THRESHOLD = 90.dp
 
 /**
  * 下拉过程中的小提示（模仿 MT：拖到阈值前提示「下拉刷新」，越过后提示「释放刷新」）。
