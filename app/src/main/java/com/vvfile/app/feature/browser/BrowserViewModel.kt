@@ -63,8 +63,10 @@ class BrowserViewModel : ViewModel() {
             val initial = settings?.startPath?.takeIf { it.isNotBlank() }
                 ?: remembered
                 ?: defaultPath
-            navigate(PaneId.LEFT, initial)
-            navigate(PaneId.RIGHT, initial)
+            // 冷启动时读 prefs 是异步的；这期间外部「定位」可能已经导航过了，
+            // 那种情况下不能用「上次路径」把人家覆盖回去
+            if (paneState(PaneId.LEFT).path.isEmpty()) navigate(PaneId.LEFT, initial)
+            if (paneState(PaneId.RIGHT).path.isEmpty()) navigate(PaneId.RIGHT, initial)
             runCatching { repository.storageStats(initial) }
                 .onSuccess { stats -> _state.update { it.copy(storage = stats) } }
         }
@@ -706,6 +708,31 @@ class BrowserViewModel : ViewModel() {
     /** 文件打开在 M2 接入；此处只暴露判断给 UI。 */
     fun isDirectory(path: String): Boolean = File(path).isDirectory
 
+    /** 外部「定位所在目录」要求的目标；下次加载该目录时用它做选中项。 */
+    private var pendingLocate: String? = null
+
+    /**
+     * 从其他应用的「定位所在目录」进来：跳到文件所在目录并选中它。
+     *
+     * 目标是目录时直接进去（不选中任何条目）；目标已被删除时退化成只打开父目录。
+     */
+    fun locate(path: String, pane: PaneId) {
+        setActive(pane)
+        if (File(path).isDirectory) {
+            navigate(pane, path)
+            return
+        }
+        val directory = PathUtils.parentOf(path) ?: return
+        val alreadyThere = paneState(pane).path == directory
+        pendingLocate = path
+        if (alreadyThere) {
+            // navigate 对同一路径会早退，这里补一次加载让选中生效
+            refresh(pane)
+        } else {
+            navigate(pane, directory)
+        }
+    }
+
     private fun load(
         pane: PaneId,
         path: String,
@@ -733,6 +760,8 @@ class BrowserViewModel : ViewModel() {
             try {
                 val entries = repository.list(path, _state.value.showHidden)
                     .sortedWith(_state.value.sort.comparator())
+                val locateTarget = pendingLocate?.takeIf { target -> entries.any { it.path == target } }
+                if (locateTarget != null) pendingLocate = null
                 updatePane(pane) { current ->
                     // 列表刷新后剔除已不存在的条目，避免"已选 N 项"与列表不一致
                     val present = entries.map { it.path }.toSet()
@@ -743,6 +772,10 @@ class BrowserViewModel : ViewModel() {
                         error = null,
                         selected = current.selected.intersect(present),
                     )
+                }
+                if (locateTarget != null) {
+                    // 定位来的文件直接选中，并保证选择态只落在这一侧
+                    _state.update { s -> s.withOnlySelection(pane, setOf(locateTarget)) }
                 }
                 runCatching { repository.storageStats(path) }
                     .onSuccess { stats -> _state.update { it.copy(storage = stats) } }

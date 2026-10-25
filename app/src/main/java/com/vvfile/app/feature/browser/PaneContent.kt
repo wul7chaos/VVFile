@@ -1,10 +1,8 @@
 package com.vvfile.app.feature.browser
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -94,11 +92,14 @@ fun PaneContent(
             .background(
                 if (active) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface,
             )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onActivate,
-            ),
+            // 点/滑/拖任何位置都把这个窗格设为活动窗格：在哪个窗格动手，就在哪个窗格操作。
+            // 只观察 Initial 阶段的首次按下、不消费事件，滚动与点击都不受影响。
+            .pointerInput(active) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    if (!active) onActivate()
+                }
+            },
     ) {
         Box(
             Modifier

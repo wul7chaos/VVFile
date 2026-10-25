@@ -2,6 +2,7 @@ package com.vvfile.app
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
@@ -16,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +40,7 @@ import com.vvfile.app.data.prefs.PrefsRepository
 import com.vvfile.app.data.prefs.Settings
 import com.vvfile.app.data.prefs.ThemeMode
 import com.vvfile.app.feature.apps.AppListScreen
+import com.vvfile.app.feature.archive.ArchiveScreen
 import com.vvfile.app.feature.browser.BrowserScreen
 import com.vvfile.app.feature.editor.EditorScreen
 import com.vvfile.app.feature.media.AudioEngine
@@ -60,12 +63,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+
+    /** 从「定位所在目录」带上来的目标文件；Compose 消费后清空。 */
+    private val locatePath = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        locatePath.value = intent?.getStringExtra(EXTRA_LOCATE_PATH)
         setContent {
             val context = LocalContext.current
             val settings by PrefsRepository.get(context).settings
@@ -102,6 +110,8 @@ class MainActivity : ComponentActivity() {
                 var imagePath by rememberSaveable { mutableStateOf<String?>(null) }
                 // 「应用信息」点数据目录后带到浏览器的目标路径
                 var browseTarget by rememberSaveable { mutableStateOf<String?>(null) }
+                // 压缩包浏览：非空时整页覆盖在文件列表之上
+                var archivePath by rememberSaveable { mutableStateOf<String?>(null) }
 
                 val notificationPermission = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission(),
@@ -118,34 +128,59 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                /**
+                 * 按类型打开一个真实路径：音视频/图片进内置播放器，文本进编辑器，
+                 * 其余交给系统。压缩包浏览里解出来的临时文件也走这里。
+                 */
+                fun openPath(path: String) {
+                    when (MediaFormats.kindOf(path)) {
+                        MediaKind.AUDIO -> {
+                            ensureNotificationPermission()
+                            audioPath = path
+                            audioMinimized = false
+                        }
+                        MediaKind.VIDEO -> {
+                            // 看视频时把后台音频收住，避免两个声音叠在一起
+                            if (AudioEngine.state.value.playing) {
+                                AudioEngine.togglePlayPause()
+                            }
+                            videoPath = path
+                        }
+                        MediaKind.IMAGE -> imagePath = path
+                        null -> if (MimeTypes.isText(path)) {
+                            editingPath = path
+                        } else if (!FileOpener.open(this@MainActivity, path)) {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "没有可打开该文件的应用",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    }
+                }
+
+                // 从外部「定位所在目录」进来时，先把盖在浏览器上的页面收起来
+                LaunchedEffect(locatePath.value) {
+                    if (locatePath.value == null) return@LaunchedEffect
+                    editingPath = null
+                    archivePath = null
+                    showSettings = false
+                    showTerminal = false
+                    showApps = false
+                }
+
                 Box(Modifier.fillMaxSize()) {
                     BrowserScreen(
                         navigateTo = browseTarget,
                         onNavigateHandled = { browseTarget = null },
+                        locateFile = locatePath.value,
+                        onLocateHandled = { locatePath.value = null },
                         onOpenFile = { path ->
-                            when (MediaFormats.kindOf(path)) {
-                                MediaKind.AUDIO -> {
-                                    ensureNotificationPermission()
-                                    audioPath = path
-                                    audioMinimized = false
-                                }
-                                MediaKind.VIDEO -> {
-                                    // 看视频时把后台音频收住，避免两个声音叠在一起
-                                    if (AudioEngine.state.value.playing) {
-                                        AudioEngine.togglePlayPause()
-                                    }
-                                    videoPath = path
-                                }
-                                MediaKind.IMAGE -> imagePath = path
-                                null -> if (MimeTypes.isText(path)) {
-                                    editingPath = path
-                                } else if (!FileOpener.open(this@MainActivity, path)) {
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "没有可打开该文件的应用",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                }
+                            // 点压缩包直接进去看，而不是弹「选择打开方式」
+                            if (path.endsWith(".zip", ignoreCase = true)) {
+                                archivePath = path
+                            } else {
+                                openPath(path)
                             }
                         },
                         onToolClick = { tool ->
@@ -175,6 +210,15 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                     )
+
+                    archivePath?.let { path ->
+                        ArchiveScreen(
+                            zipPath = path,
+                            onClose = { archivePath = null },
+                            onOpenEntry = { extracted -> openPath(extracted) },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
                     editingPath?.let { path ->
                         EditorScreen(
@@ -251,6 +295,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(EXTRA_LOCATE_PATH)?.let { locatePath.value = it }
+    }
+
     /**
      * 侧栏「文本编辑器」：新建一个临时 txt 并直接进入编辑。
      *
@@ -269,7 +319,10 @@ class MainActivity : ComponentActivity() {
         file.absolutePath
     }.getOrNull()
 
-    private companion object {
+    companion object {
         private const val SCRATCH_DIR = "editor"
+
+        /** 「定位所在目录」传来的目标文件绝对路径。 */
+        const val EXTRA_LOCATE_PATH = "com.vvfile.app.extra.LOCATE_PATH"
     }
 }

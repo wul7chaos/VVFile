@@ -138,6 +138,9 @@ fun BrowserScreen(
     /** 外部（如应用信息弹窗）请求跳转的路径；消费后回调 [onNavigateHandled]。 */
     navigateTo: String? = null,
     onNavigateHandled: (() -> Unit)? = null,
+    /** 外部「定位所在目录」请求定位的文件；消费后回调 [onLocateHandled]。 */
+    locateFile: String? = null,
+    onLocateHandled: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -288,6 +291,24 @@ fun BrowserScreen(
         val target = navigateTo ?: return@LaunchedEffect
         viewModel.navigate(state.active, target)
         onNavigateHandled?.invoke()
+    }
+
+    // 外部「定位所在目录」：跳进文件所在目录并选中它
+    var locatingTarget by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(locateFile) {
+        val target = locateFile ?: return@LaunchedEffect
+        viewModel.locate(target, state.active)
+        locatingTarget = target
+        onLocateHandled?.invoke()
+    }
+    // 目标常常在列表下方，选中之后还要把它滚到可视区
+    LaunchedEffect(locatingTarget, activePane.visibleEntries) {
+        val target = locatingTarget ?: return@LaunchedEffect
+        val index = activePane.visibleEntries.indexOfFirst { it.path == target }
+        if (index < 0) return@LaunchedEffect
+        val listState = if (state.active == PaneId.LEFT) leftListState else rightListState
+        listState.requestScrollToItem(index)
+        locatingTarget = null
     }
 
     // 返回键 / 全面屏侧滑：选择态 → 抽屉 → 上一层目录。

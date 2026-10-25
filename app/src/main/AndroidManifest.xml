@@ -47,6 +47,27 @@
             </intent-filter>
         </activity>
 
+        <!-- 其他应用「打开方式」里的「定位所在目录」：跳进 VVFile 并定位到该文件 -->
+        <activity
+            android:name=".LocateActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/locate_label"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
