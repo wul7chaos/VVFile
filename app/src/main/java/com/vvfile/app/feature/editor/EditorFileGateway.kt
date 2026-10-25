@@ -61,7 +61,7 @@ class EditorFileGateway(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
-    suspend fun read(path: String): EditorDocument = withContext(dispatcher) {
+    suspend fun read(path: String, forced: TextEncoding? = null): EditorDocument = withContext(dispatcher) {
         val file = resolveForRead(path)
         try {
             if (Files.isDirectory(file)) throw EditorException(MSG_IS_DIRECTORY)
@@ -69,7 +69,11 @@ class EditorFileGateway(
             val truncated = size > MAX_EDITABLE_BYTES
             val limit = if (truncated) PREVIEW_BYTES else size
             val bytes = readPrefix(file, limit)
-            val (encoding, text) = decode(bytes, truncated)
+            val (encoding, text) = if (forced != null) {
+                forced to String(bytes, forced.charset)
+            } else {
+                decode(bytes, truncated)
+            }
             EditorDocument(text = text, encoding = encoding, truncated = truncated)
         } catch (known: EditorException) {
             throw known
