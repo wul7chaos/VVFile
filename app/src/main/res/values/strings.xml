@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">VVFile</string>
+
+    <!-- 终端长按选区的上下文菜单（terminal-view 的选择手柄使用） -->
+    <string name="copy_text">复制</string>
+    <string name="paste_text">粘贴</string>
+    <string name="text_selection_more">更多…</string>
 </resources>

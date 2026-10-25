@@ -20,6 +20,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,17 +89,19 @@ class MainActivity : ComponentActivity() {
                 pureBlack = settings.theme == ThemeMode.BLACK,
                 accent = AccentPresets.getOrNull(settings.accentIndex),
             ) {
-                var editingPath by remember { mutableStateOf<String?>(null) }
-                var showSettings by remember { mutableStateOf(false) }
-                var showTerminal by remember { mutableStateOf(false) }
-                var showApps by remember { mutableStateOf(false) }
+                // 屏幕开关用 rememberSaveable：旋转屏幕后仍停留在同一页
+                // （终端的 ViewModel 会跨配置变更存活，PTY 会话不中断）。
+                var editingPath by rememberSaveable { mutableStateOf<String?>(null) }
+                var showSettings by rememberSaveable { mutableStateOf(false) }
+                var showTerminal by rememberSaveable { mutableStateOf(false) }
+                var showApps by rememberSaveable { mutableStateOf(false) }
                 // 内置播放器：音频走可最小化的面板，视频/图片整页覆盖
-                var audioPath by remember { mutableStateOf<String?>(null) }
-                var audioMinimized by remember { mutableStateOf(false) }
-                var videoPath by remember { mutableStateOf<String?>(null) }
-                var imagePath by remember { mutableStateOf<String?>(null) }
+                var audioPath by rememberSaveable { mutableStateOf<String?>(null) }
+                var audioMinimized by rememberSaveable { mutableStateOf(false) }
+                var videoPath by rememberSaveable { mutableStateOf<String?>(null) }
+                var imagePath by rememberSaveable { mutableStateOf<String?>(null) }
                 // 「应用信息」点数据目录后带到浏览器的目标路径
-                var browseTarget by remember { mutableStateOf<String?>(null) }
+                var browseTarget by rememberSaveable { mutableStateOf<String?>(null) }
 
                 val notificationPermission = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission(),

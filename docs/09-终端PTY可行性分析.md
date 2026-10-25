@@ -156,6 +156,38 @@ PTY 只是内核设施，`execve` 的目标是 **`/system/bin/sh`**（系统分�
 
 ---
 
+## 5.1 方案 A 已实施（2026-10-25）
+
+方案 A 已落地并逐条验证，验收口径全部通过。落地形态与预估的差异：
+
+| 项 | 预估 | 实际 |
+| --- | --- | --- |
+| 实现方式 | 独立 library 模块 + `implementation project(...)` | 直接并入 `:app`（`java/com/termux/**`），少两个模块，`R` 改成 `com.vvfile.app.R` |
+| JNI 构建 | `ndkBuild` | 同；但只需 NDK，**不需要 CMake**（本机没装 CMake） |
+| ABI | 4 个 | 只留 `arm64-v8a` / `x86_64`，`libtermux.so` 9.3 KB/9.5 KB |
+| 需实现的回调 | `TerminalSessionClient` 43 + `TerminalViewClient` 25 | 实际 `TerminalSessionClient` 19 个、`TerminalViewClient` 25 个，其中日志 14 个 |
+| root 判定 | 读 `/proc/<pid>/status` 的 `Uid` | **改掉**：KernelSU 的 `su` 把请求交给守护进程，真正的 root shell 是守护进程 fork 出来的**另一个 pid**，且 SELinux 读不到；改为读光标行上「干净提示符」的 `#`/`$` |
+| 提示符 | `PS1=':\w \$ '` | mksh 不支持 `\w`，改用 `PS1=':${PWD} \$ '`（mksh 每个提示符重新展开） |
+| `sudo` | 之前是 ViewModel 里的 `su -c` 分支 | PTY 之后可用 `$ENV` 启动脚本补一个 mksh 函数 `sudo() { su -c "$*"; }`，语义不变 |
+| 回滚历史 | 5000 行 | 同 |
+
+实测证据（MuMu Android 15，x86_64）：
+
+- `stty size` → 竖屏 `37 54`、横屏 `15 96`，`tty` → `/dev/pts/0`：真 PTY，且
+  `TIOCSWINSZ` 与 App 侧列数一致
+- `ls`、`clear`、`cd /sdc + Tab` → `cd /sdcard/`、`sleep 100` + `^C` → `130|` 回到提示符
+- `top -n 1` 全屏输出、表头反显正常（VT 的 SGR 反显 / alternate screen 可用）
+- `su` → 提示符变 `#`、顶栏出现绿色 `root` 徽标、滚动历史保留
+- `sudo id -u` → `0`，提示符仍是 `$`（会话身份不变）
+- 旋转屏幕：界面停留在终端、会话不断、`stty size` 跟随变化、输出不丢
+- 单测 **213** 条全绿（新增 `PtyShellTest` 覆盖启动参数、`$ENV` 脚本、提示符判定）
+
+许可与合规：只引进 `terminal-emulator` / `terminal-view`（Apache-2.0 例外）与
+`jni/termux.c`；**未**引进 GPLv3 的 `termux-shared` 与 `app/`。清单见仓库根
+[`NOTICE.md`](../NOTICE.md)。
+
+---
+
 ## 6. 附：clone 内关键文件索引
 
 - `termux-app/terminal-emulator/src/main/java/com/termux/terminal/TerminalSession.java` —— PTY 会话

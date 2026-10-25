@@ -21,8 +21,8 @@ data class Settings(
     val detailedList: Boolean = false,
     /** 强调色预设索引，见 AccentPresets。 */
     val accentIndex: Int = 0,
-    /** 终端与编辑器字号（sp）。 */
-    val terminalFontSize: Int = 13,
+    /** 终端字号（sp）。真 PTY 之后按列排版，11sp 在 1080p 上约 43 列。 */
+    val terminalFontSize: Int = 11,
     val editorFontSize: Int = 13,
     val sort: SortSpec = SortSpec(),
     val startPath: String? = null,

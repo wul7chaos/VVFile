@@ -1,0 +1,7 @@
+LOCAL_PATH := $(call my-dir)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := termux
+LOCAL_SRC_FILES := termux.c
+LOCAL_CFLAGS := -std=c11 -Os -Wall -Wextra -fno-stack-protector
+include $(BUILD_SHARED_LIBRARY)

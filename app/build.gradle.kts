@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.vvfile.app"
     compileSdk = 36
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "com.vvfile.app"
@@ -18,6 +19,22 @@ android {
         versionName = "1.0.0"
 
         vectorDrawables { useSupportLibrary = true }
+
+        // 终端 PTY：只有这一个 .so，来自 Termux terminal-emulator 的 jni/termux.c（Apache-2.0）。
+        // 只保留 64 位 ABI，包体每个 ABI 约增加 12KB。
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+
+        externalNativeBuild {
+            ndkBuild {
+                cFlags += listOf("-std=c11", "-Os")
+            }
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path = file("src/main/cpp/Android.mk")
+        }
     }
 
     buildTypes {
