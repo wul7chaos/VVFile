@@ -37,20 +37,7 @@ object FilePropertyReader {
         val symlink = runCatching { Files.isSymbolicLink(target) }.getOrDefault(false)
         val size = runCatching { Files.size(target) }.getOrDefault(0L)
         val modified = runCatching { Files.getLastModifiedTime(target).toMillis() }.getOrDefault(0L)
-        val permissions = attributes?.permissions()?.let { perms ->
-            buildString {
-                val strings = perms.map { it.toString() }.toSet()
-                append(if (strings.any { it.startsWith("OWNER_READ") }) "r" else "-")
-                append(if (strings.any { it.startsWith("OWNER_WRITE") }) "w" else "-")
-                append(if (strings.any { it.startsWith("OWNER_EXECUTE") }) "x" else "-")
-                append(if (strings.any { it.startsWith("GROUP_READ") }) "r" else "-")
-                append(if (strings.any { it.startsWith("GROUP_WRITE") }) "w" else "-")
-                append(if (strings.any { it.startsWith("GROUP_EXECUTE") }) "x" else "-")
-                append(if (strings.any { it.startsWith("OTHERS_READ") }) "r" else "-")
-                append(if (strings.any { it.startsWith("OTHERS_WRITE") }) "w" else "-")
-                append(if (strings.any { it.startsWith("OTHERS_EXECUTE") }) "x" else "-")
-            }
-        } ?: "—"
+        val permissions = symbolicMode(attributes)
         FileProperties(
             name = target.fileName?.toString() ?: path,
             path = path,
@@ -63,5 +50,29 @@ object FilePropertyReader {
             readable = runCatching { Files.isReadable(target) }.getOrDefault(false),
             writable = runCatching { Files.isWritable(target) }.getOrDefault(false),
         )
+    }
+}
+
+/**
+ * POSIX 权限 → `rwxr-xr-x`；读不到属性时返回 `—`。
+ *
+ * 属性文件（属性面板、批量属性）与批量改权限共用同一套映射，
+ * 否则「属性里显示的」和「改权限回填的」会不一致。
+ */
+internal fun symbolicMode(attributes: PosixFileAttributes?): String {
+    val permissions = attributes?.permissions() ?: return "—"
+    val names = permissions.mapTo(HashSet()) { it.toString() }
+    fun pos(name: String, allowed: Char, denied: Char = '-'): Char =
+        if (names.any { it.startsWith(name) }) allowed else denied
+    return buildString {
+        append(pos("OWNER_READ", 'r'))
+        append(pos("OWNER_WRITE", 'w'))
+        append(pos("OWNER_EXECUTE", 'x'))
+        append(pos("GROUP_READ", 'r'))
+        append(pos("GROUP_WRITE", 'w'))
+        append(pos("GROUP_EXECUTE", 'x'))
+        append(pos("OTHERS_READ", 'r'))
+        append(pos("OTHERS_WRITE", 'w'))
+        append(pos("OTHERS_EXECUTE", 'x'))
     }
 }

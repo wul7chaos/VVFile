@@ -276,6 +276,69 @@ class BrowserViewModel : ViewModel() {
         startFlow(OperationKind.DELETE) { operator.delete(paths) }
     }
 
+    /**
+     * 批量重命名。[renames] 是 (原绝对路径, 新名称)，新名称已由 [BatchRename] 校验过。
+     *
+     * 批内互换（a→b、b→a）直接改会互相覆盖，所以检测到目标名与批内某个源名相撞时，
+     * 先把这批整体挪到临时名，再落到最终名。
+     */
+    fun batchRename(renames: List<Pair<String, String>>) {
+        if (isBusy()) return notifyBusy()
+        if (renames.isEmpty()) return
+        viewModelScope.launch {
+            var succeeded = 0
+            var failed = 0
+            var reason: String? = null
+            val sources = renames.mapTo(HashSet()) { it.first }
+            val needsStaging = renames.any { (path, name) ->
+                val target = PathUtils.join(parentDir(path), name)
+                target != path && target in sources
+            }
+
+            suspend fun apply(path: String, name: String) {
+                val result = runCatching { operator.rename(path, name) }.getOrNull()
+                if (result?.isSuccess == true) {
+                    succeeded++
+                } else {
+                    failed++
+                    reason = reason ?: result?.failures?.firstOrNull()?.reason ?: "重命名失败"
+                }
+            }
+
+            try {
+                if (needsStaging) {
+                    val staged = ArrayList<Pair<String, String>>()
+                    renames.forEachIndexed { index, item ->
+                        val (path, name) = item
+                        val tempName = "$STAGING_PREFIX$index.tmp"
+                        val result = runCatching { operator.rename(path, tempName) }.getOrNull()
+                        if (result?.isSuccess == true) {
+                            staged += PathUtils.join(parentDir(path), tempName) to name
+                        } else {
+                            failed++
+                            reason = reason ?: result?.failures?.firstOrNull()?.reason ?: "重命名失败"
+                        }
+                    }
+                    staged.forEach { (tempPath, name) -> apply(tempPath, name) }
+                } else {
+                    renames.forEach { (path, name) -> apply(path, name) }
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                failed++
+                reason = reason ?: error.message
+            }
+            postMessage(UiMessage.Result(succeeded, failed, 0, false, reason))
+            afterOperation()
+        }
+    }
+
+    private fun parentDir(path: String): String {
+        val index = path.lastIndexOf('/')
+        return if (index <= 0) "/" else path.substring(0, index)
+    }
+
     fun renameSelection(newName: String) {
         if (isBusy()) return notifyBusy()
         val entry = selectedEntries(activePaneState()).singleOrNull()
@@ -376,28 +439,32 @@ class BrowserViewModel : ViewModel() {
         _state.update { if (it.message == null) it else it.copy(message = null) }
     }
 
-    fun changePermissions(path: String, mode: String) {
+    /** 批量改权限：逐条应用同一个模式，最后汇总一条提示。 */
+    fun changePermissions(paths: List<String>, mode: String) {
         if (isBusy()) return notifyBusy()
+        if (paths.isEmpty()) return
+        val trimmed = mode.trim()
         viewModelScope.launch {
-            try {
-                val result = operator.chmod(path, mode)
-                if (result.isSuccess) {
-                    postMessage(UiMessage.Simple(R.string.ui_ops_chmod_success))
-                    afterOperation()
+            var succeeded = 0
+            var failed = 0
+            var reason: String? = null
+            for (path in paths) {
+                val result = runCatching { operator.chmod(path, trimmed) }.getOrNull()
+                if (result?.isSuccess == true) {
+                    succeeded++
                 } else {
-                    postMessage(
-                        UiMessage.Result(
-                            0,
-                            1,
-                            0,
-                            false,
-                            result.failures.firstOrNull()?.reason ?: "修改权限失败",
-                        ),
-                    )
+                    failed++
+                    reason = reason ?: result?.failures?.firstOrNull()?.reason ?: "修改权限失败"
                 }
-            } catch (error: Exception) {
-                postMessage(UiMessage.Result(0, 1, 0, false, error.message ?: "修改权限失败"))
             }
+            postMessage(
+                if (failed == 0) {
+                    UiMessage.Simple(R.string.ui_ops_chmod_success)
+                } else {
+                    UiMessage.Result(succeeded, failed, 0, false, reason)
+                },
+            )
+            afterOperation()
         }
     }
 
@@ -713,6 +780,9 @@ class BrowserViewModel : ViewModel() {
 
     private companion object {
         val RESTRICTED_DIR_SUFFIXES = listOf("/Android/data", "/Android/obb")
+
+        /** 批量重命名「批内互换」时的临时名前缀：点开头，且带序号，避免撞车。 */
+        const val STAGING_PREFIX = ".vvrename_"
     }
 }
 

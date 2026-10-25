@@ -115,6 +115,8 @@ import com.vvfile.app.core.script.ScriptRunResult
 import com.vvfile.app.core.script.ScriptRunner
 import com.vvfile.app.core.shell.RootManager
 import com.vvfile.app.core.share.FileSharer
+import com.vvfile.app.data.file.AggregateProperties
+import com.vvfile.app.data.file.AggregatePropertyReader
 import com.vvfile.app.data.file.FileProperties
 import com.vvfile.app.data.file.FilePropertyReader
 import com.vvfile.app.data.prefs.PrefsRepository
@@ -144,7 +146,8 @@ fun BrowserScreen(
     var properties by remember { mutableStateOf<FileProperties?>(null) }
     var showFilter by remember { mutableStateOf(false) }
     var showUnzipTo by remember { mutableStateOf(false) }
-    var chmodTarget by remember { mutableStateOf<FileProperties?>(null) }
+    var aggregate by remember { mutableStateOf<AggregateProperties?>(null) }
+    var chmodRequest by remember { mutableStateOf<ChmodRequest?>(null) }
 
     // 每个窗格一份滚动状态；路径变化时回到顶部（requestScrollToItem 在列表尚未布局时也生效）
     val leftListState = rememberLazyListState()
@@ -198,6 +201,55 @@ fun BrowserScreen(
     var scriptEnv by remember { mutableStateOf(ScriptExecutionPrefs.env) }
     var scriptPermission by remember { mutableStateOf(ScriptExecutionPrefs.permission) }
     var nameDialog by remember { mutableStateOf<NameDialogState?>(null) }
+    /** 批量重命名的目标条目；非空时展示对话框。 */
+    var batchRenameTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
+
+    /**
+     * 长按打开操作菜单（对齐 MT）：按下的条目已经在选区里就作用于整批，否则把它设为唯一选中项。
+     *
+     * 旧实现无条件「清空选区再选这一条」，多选 14 个文件后长按其中任意一个，
+     * 选区就被打散成一个，后面的复制/移动全变成了单条操作。
+     */
+    val openActionMenu: (PaneId, FileEntry) -> Unit = { paneId, entry ->
+        viewModel.setActive(paneId)
+        val pane = if (paneId == PaneId.LEFT) state.left else state.right
+        val targets = if (entry.path in pane.selected) {
+            pane.entries.filter { it.path in pane.selected }
+        } else {
+            viewModel.clearSelection(paneId)
+            viewModel.toggleSelect(paneId, entry.path)
+            listOf(entry)
+        }
+        actionTarget = FileActionTarget(entry, paneId, targets.ifEmpty { listOf(entry) })
+    }
+
+    /** 单条 → 单条属性；多条 → 聚合属性（递归统计合计大小与文件/文件夹数）。 */
+    val openProperties: (List<FileEntry>) -> Unit = { entries ->
+        val directory = activePane.path
+        when (entries.size) {
+            0 -> Unit
+            1 -> scope.launch { properties = FilePropertyReader.read(entries.first().path) }
+            else -> {
+                val paths = entries.map { it.path }
+                scope.launch { aggregate = AggregatePropertyReader.read(paths, directory) }
+            }
+        }
+    }
+
+    /** 单条改权限回填它自己的权限位；多条统一改，默认 644。 */
+    val openChmod: (List<FileEntry>) -> Unit = { entries ->
+        if (entries.size == 1) {
+            val path = entries.first().path
+            scope.launch {
+                val info = FilePropertyReader.read(path)
+                if (info != null) {
+                    chmodRequest = ChmodRequest(listOf(path), octalFromSymbolic(info.permissions))
+                }
+            }
+        } else if (entries.isNotEmpty()) {
+            chmodRequest = ChmodRequest(entries.map { it.path }, "644")
+        }
+    }
 
     // 一次性操作提示：展示后立即消费，避免重组重复弹出
     LaunchedEffect(state.message) {
@@ -308,12 +360,7 @@ fun BrowserScreen(
                             Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    onLongPress = { entry ->
-                        viewModel.setActive(PaneId.LEFT)
-                        viewModel.clearSelection(PaneId.LEFT)
-                        viewModel.toggleSelect(PaneId.LEFT, entry.path)
-                        actionTarget = FileActionTarget(entry, PaneId.LEFT)
-                    },
+                    onLongPress = { entry -> openActionMenu(PaneId.LEFT, entry) },
                     onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.LEFT, entry.path) },
                     onRetry = { viewModel.refresh(PaneId.LEFT) },
                     onNewFolder = {
@@ -350,12 +397,7 @@ fun BrowserScreen(
                                 Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
                             }
                         },
-                        onLongPress = { entry ->
-                            viewModel.setActive(PaneId.RIGHT)
-                            viewModel.clearSelection(PaneId.RIGHT)
-                            viewModel.toggleSelect(PaneId.RIGHT, entry.path)
-                            actionTarget = FileActionTarget(entry, PaneId.RIGHT)
-                        },
+                        onLongPress = { entry -> openActionMenu(PaneId.RIGHT, entry) },
                         onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.RIGHT, entry.path) },
                         onRetry = { viewModel.refresh(PaneId.RIGHT) },
                         onNewFolder = {
@@ -373,9 +415,15 @@ fun BrowserScreen(
                     onCopy = viewModel::copySelectionToOtherPane,
                     onMove = viewModel::moveSelectionToOtherPane,
                     onDelete = { showDeleteConfirm = true },
-                    canRename = singleSelected != null,
+                    multi = activeSelectedEntries.size > 1,
                     onRename = {
-                        singleSelected?.let { nameDialog = NameDialogState(NameDialogMode.RENAME, it.name) }
+                        if (activeSelectedEntries.size > 1) {
+                            batchRenameTargets = activeSelectedEntries
+                        } else {
+                            singleSelected?.let {
+                                nameDialog = NameDialogState(NameDialogMode.RENAME, it.name)
+                            }
+                        }
                     },
                     onCompress = {
                         val base = singleSelected?.let { defaultZipBaseName(it) }
@@ -390,12 +438,7 @@ fun BrowserScreen(
                     onShare = {
                         FileSharer.share(context, activePane.selected.toList())
                     },
-                    canProperties = singleSelected != null,
-                    onProperties = {
-                        singleSelected?.let { entry ->
-                            scope.launch { properties = FilePropertyReader.read(entry.path) }
-                        }
-                    },
+                    onProperties = { openProperties(activeSelectedEntries) },
                 )
             } else {
                 BrowserBottomBar(
@@ -494,6 +537,7 @@ fun BrowserScreen(
 
     actionTarget?.let { target ->
         val entry = target.entry
+        val targets = target.targets
         FileActionMenu(
             target = target,
             onDismiss = { actionTarget = null },
@@ -501,22 +545,16 @@ fun BrowserScreen(
             onMove = viewModel::moveSelectionToOtherPane,
             onDelete = { showDeleteConfirm = true },
             onRename = { nameDialog = NameDialogState(NameDialogMode.RENAME, entry.name) },
+            onBatchRename = { batchRenameTargets = targets },
             onCompress = {
                 val base = entry.name.substringBeforeLast('.').ifBlank { entry.name }
                 nameDialog = NameDialogState(NameDialogMode.ZIP, "$base.zip")
             },
             onUnzip = viewModel::unzipSelection,
             onUnzipTo = { showUnzipTo = true },
-            onProperties = {
-                scope.launch { properties = FilePropertyReader.read(entry.path) }
-            },
-            onShare = { FileSharer.share(context, listOf(entry.path)) },
-            onChmod = {
-                scope.launch {
-                    val info = FilePropertyReader.read(entry.path)
-                    if (info != null) chmodTarget = info
-                }
-            },
+            onProperties = { openProperties(targets) },
+            onShare = { FileSharer.share(context, targets.map { it.path }) },
+            onChmod = { openChmod(targets) },
             onOpenWith = { openWithTarget = entry },
         )
     }
@@ -545,19 +583,50 @@ fun BrowserScreen(
             onDismiss = { properties = null },
             onChangePermissions = {
                 properties = null
-                chmodTarget = info
+                chmodRequest = ChmodRequest(listOf(info.path), octalFromSymbolic(info.permissions))
             },
         )
     }
 
-    chmodTarget?.let { info ->
-        ChmodDialog(
+    aggregate?.let { info ->
+        MultiPropertiesDialog(
             properties = info,
-            onConfirm = { mode ->
-                chmodTarget = null
-                viewModel.changePermissions(info.path, mode)
+            onDismiss = { aggregate = null },
+            onChangePermissions = {
+                aggregate = null
+                chmodRequest = ChmodRequest(
+                    paths = info.paths,
+                    initialMode = info.commonPermissions?.let { octalFromSymbolic(it) } ?: "644",
+                )
             },
-            onDismiss = { chmodTarget = null },
+        )
+    }
+
+    chmodRequest?.let { request ->
+        ChmodDialog(
+            paths = request.paths,
+            initialMode = request.initialMode,
+            onConfirm = { mode ->
+                chmodRequest = null
+                viewModel.changePermissions(request.paths, mode)
+            },
+            onDismiss = { chmodRequest = null },
+        )
+    }
+
+    batchRenameTargets?.let { entries ->
+        BatchRenameDialog(
+            targets = entries.map { RenameTarget(it.name, it.path, it.isDirectory) },
+            existingNames = activePane.entries.mapTo(HashSet()) { it.name },
+            onDismiss = { batchRenameTargets = null },
+            onConfirm = { previews ->
+                batchRenameTargets = null
+                val renames = previews.mapNotNull { preview ->
+                    entries.firstOrNull { it.name == preview.original }
+                        ?.let { entry -> entry.path to preview.result }
+                }
+                viewModel.batchRename(renames)
+            },
         )
     }
 
@@ -990,14 +1059,13 @@ private fun SelectionBottomBar(
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onDelete: () -> Unit,
-    canRename: Boolean,
+    multi: Boolean,
     onRename: () -> Unit,
     onCompress: () -> Unit,
     canUnzip: Boolean,
     onUnzip: () -> Unit,
     onUnzipTo: () -> Unit,
     onShare: () -> Unit,
-    canProperties: Boolean,
     onProperties: () -> Unit,
 ) {
     var moreOpen by remember { mutableStateOf(false) }
@@ -1043,8 +1111,7 @@ private fun SelectionBottomBar(
             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                 SelectionMoreItem(
                     icon = Icons.Outlined.Edit,
-                    label = stringResource(R.string.ui_action_rename),
-                    enabled = canRename,
+                    label = if (multi) "批量重命名" else stringResource(R.string.ui_action_rename),
                     onAction = onRename,
                     onClose = { moreOpen = false },
                 )
@@ -1077,7 +1144,6 @@ private fun SelectionBottomBar(
                 SelectionMoreItem(
                     icon = Icons.Outlined.Info,
                     label = stringResource(R.string.ui_action_properties),
-                    enabled = canProperties,
                     onAction = onProperties,
                     onClose = { moreOpen = false },
                 )
@@ -1331,22 +1397,26 @@ private fun PropertiesDialog(
     )
 }
 
+/**
+ * 改权限对话框的入参。[paths] 为单条或整批，[initialMode] 是回填的八进制权限位。
+ */
+private data class ChmodRequest(val paths: List<String>, val initialMode: String)
+
 @Composable
 private fun ChmodDialog(
-    properties: FileProperties,
+    paths: List<String>,
+    initialMode: String,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var mode by remember {
-        mutableStateOf(octalFromSymbolic(properties.permissions))
-    }
+    var mode by remember { mutableStateOf(initialMode) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.ui_chmod_title)) },
         text = {
             Column {
                 Text(
-                    text = properties.path,
+                    text = if (paths.size == 1) paths.first() else "已选 ${paths.size} 项",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,

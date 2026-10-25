@@ -21,7 +21,7 @@ import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
@@ -52,15 +52,28 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.vvfile.app.data.model.FileEntry
 
-/** 长按菜单的目标：条目 + 它所在的窗格（决定复制/移动的方向文案）。 */
-data class FileActionTarget(val entry: FileEntry, val pane: PaneId)
+/**
+ * 长按菜单的目标：条目 + 它所在的窗格（决定复制/移动的方向文案）+ 本次操作的整批条目。
+ *
+ * [targets] 在长按那一刻从选区快照下来：只有 1 项时是单条菜单，
+ * 多项时整份菜单都作用于这批条目（对齐 MT 的多选长按）。
+ */
+data class FileActionTarget(
+    val entry: FileEntry,
+    val pane: PaneId,
+    val targets: List<FileEntry> = listOf(entry),
+) {
+    val multi: Boolean get() = targets.size > 1
+    val count: Int get() = targets.size
+}
 
 /**
  * 长按文件弹出的操作菜单，浮在画面正中（对齐 MT）。
  *
  * 复制/移动的方向文案随窗格变化：左窗格条目是「复制 ->」「移动 ->」，
  * 右窗格条目是「<- 复制」「<- 移动」。
- * 压缩包（zip/apk）多出「解压」「解压到…」。
+ * 压缩包（zip/apk）多出「解压」「解压到…」；多选时「重命名」变成「批量重命名」，
+ * 「打开方式…」没有意义所以不出现。
  */
 @Composable
 fun FileActionMenu(
@@ -70,6 +83,7 @@ fun FileActionMenu(
     onMove: () -> Unit,
     onDelete: () -> Unit,
     onRename: () -> Unit,
+    onBatchRename: () -> Unit,
     onCompress: () -> Unit,
     onUnzip: () -> Unit,
     onUnzipTo: () -> Unit,
@@ -84,7 +98,7 @@ fun FileActionMenu(
     val clipboard = LocalClipboardManager.current
     var toolsOpen by remember { mutableStateOf(false) }
 
-    val isArchive = !entry.isDirectory && entry.extension in ARCHIVE_EXTENSIONS
+    val isArchive = !target.multi && !entry.isDirectory && entry.extension in ARCHIVE_EXTENSIONS
     val copyLabel = if (pane == PaneId.LEFT) "复制 ->" else "<- 复制"
     val moveLabel = if (pane == PaneId.LEFT) "移动 ->" else "<- 移动"
 
@@ -96,24 +110,36 @@ fun FileActionMenu(
             modifier = Modifier.fillMaxWidth(0.94f),
         ) {
             Column(Modifier.heightIn(max = 520.dp)) {
-                Text(
-                    text = entry.name,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
+                Column(
+                    Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 10.dp),
-                )
+                ) {
+                    Text(
+                        text = if (target.multi) "已选 ${target.count} 项" else entry.name,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (target.multi) {
+                        Text(
+                            text = target.targets.joinToString(", ") { it.name },
+                            fontSize = 10.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 if (toolsOpen) {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         MenuRow(
                             icon = Icons.Outlined.Lock,
-                            label = "修改权限",
+                            label = if (target.multi) "批量修改权限" else "修改权限",
                             onClick = {
                                 onDismiss()
                                 onChmod()
@@ -121,9 +147,11 @@ fun FileActionMenu(
                         )
                         MenuRow(
                             icon = Icons.Outlined.ContentCopy,
-                            label = "复制路径",
+                            label = if (target.multi) "复制 ${target.count} 个路径" else "复制路径",
                             onClick = {
-                                clipboard.setText(AnnotatedString(entry.path))
+                                clipboard.setText(
+                                    AnnotatedString(target.targets.joinToString("\n") { it.path }),
+                                )
                                 Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
                                 onDismiss()
                             },
@@ -145,8 +173,19 @@ fun FileActionMenu(
                                 ) { onMove() },
                             )
                             add(MenuAction("删除", Icons.Outlined.DeleteOutline, dangerous = true) { onDelete() })
-                            add(MenuAction("重命名", Icons.Outlined.Edit) { onRename() })
-                            add(MenuAction("工具", Icons.Outlined.Build) { toolsOpen = true })
+                            if (target.multi) {
+                                add(MenuAction("批量重命名", Icons.Outlined.DriveFileRenameOutline) { onBatchRename() })
+                            } else {
+                                add(MenuAction("重命名", Icons.Outlined.DriveFileRenameOutline) { onRename() })
+                            }
+                            add(
+                                MenuAction(
+                                    label = "工具",
+                                    icon = Icons.Outlined.Build,
+                                    // 工具是二级页，不能像其它项那样先关掉菜单
+                                    keepOpen = true,
+                                ) { toolsOpen = true },
+                            )
                             add(MenuAction("压缩", Icons.Outlined.Archive) { onCompress() })
                             add(MenuAction("属性", Icons.Outlined.Info) { onProperties() })
                             add(MenuAction("分享", Icons.Outlined.Share) { onShare() })
@@ -154,7 +193,9 @@ fun FileActionMenu(
                                 add(MenuAction("解压", Icons.Outlined.Unarchive) { onUnzip() })
                                 add(MenuAction("解压到…", Icons.Outlined.FolderOpen) { onUnzipTo() })
                             }
-                            add(MenuAction("打开方式…", Icons.Outlined.OpenInNew) { onOpenWith() })
+                            if (!target.multi) {
+                                add(MenuAction("打开方式…", Icons.Outlined.OpenInNew) { onOpenWith() })
+                            }
                         }
                         actions.chunked(2).forEach { row ->
                             Row(Modifier.fillMaxWidth()) {
@@ -163,7 +204,7 @@ fun FileActionMenu(
                                         action = action,
                                         modifier = Modifier.weight(1f),
                                         onClick = {
-                                            onDismiss()
+                                            if (!action.keepOpen) onDismiss()
                                             action.onClick()
                                         },
                                     )
@@ -182,6 +223,8 @@ private class MenuAction(
     val label: String,
     val icon: ImageVector,
     val dangerous: Boolean = false,
+    /** true 时点完不关闭菜单（用于「工具」这种打开二级页的项）。 */
+    val keepOpen: Boolean = false,
     val onClick: () -> Unit,
 )
 
