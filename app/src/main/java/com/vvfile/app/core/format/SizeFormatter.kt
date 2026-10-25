@@ -6,6 +6,24 @@ import java.util.Locale
 object SizeFormatter {
     private val units = arrayOf("B", "KB", "MB", "GB", "TB", "PB")
 
+    /** MT 风格的紧凑写法：23.14M / 345K / 1.20G，用于应用列表第二行。 */
+    fun formatCompact(bytes: Long): String {
+        if (bytes < 0) return "-"
+        if (bytes < 1024) return "$bytes B"
+        var value = bytes.toDouble()
+        var unit = 0
+        while (value >= 1024 && unit < units.lastIndex) {
+            value /= 1024
+            unit++
+        }
+        val letter = units[unit].take(1)
+        return if (unit == 1) {
+            String.format(Locale.US, "%.1f%s", value, letter)
+        } else {
+            String.format(Locale.US, "%.2f%s", value, letter)
+        }
+    }
+
     fun format(bytes: Long): String {
         if (bytes < 0) return "-"
         if (bytes < 1024) return "$bytes B"

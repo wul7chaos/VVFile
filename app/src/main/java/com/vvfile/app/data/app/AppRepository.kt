@@ -39,15 +39,55 @@ class AppRepository(
     private val iconCache = HashMap<String, Bitmap?>()
     private val collator = Collator.getInstance(Locale.CHINA)
 
-    suspend fun loadApps(): List<AppInfo> = withContext(Dispatchers.IO) {
+    /**
+     * 读取已安装应用列表。
+     *
+     * 有缓存且 PackageManager 报告「自上次扫描以来没有包变化」时直接返回缓存，
+     * 避免每次打开列表都跑一遍 `pm list packages`（root 通道尤其慢）。
+     * [force] 为 true（下拉刷新）或缓存失效时重新全量扫描。
+     */
+    suspend fun loadApps(force: Boolean = false): List<AppInfo> = withContext(Dispatchers.IO) {
+        if (!force) {
+            cachedApps()?.let { snapshot ->
+                if (!hasPackageChanges()) return@withContext snapshot
+            }
+        }
         val fromRoot = if (RootAccess.allowed()) {
             runCatching { loadFromRoot() }.getOrNull().orEmpty()
         } else {
             emptyList()
         }
         val apps = if (fromRoot.isNotEmpty()) fromRoot else loadFromPackageManager()
-        apps.sortedWith { left, right -> collator.compare(left.label, right.label) }
+        val sorted = apps.sortedWith { left, right -> collator.compare(left.label, right.label) }
+        storeCache(sorted)
+        sorted
     }
+
+    /**
+     * 包变化检测：`getChangedPackages(seq)` 只返回序列号之后的包名，
+     * 比重新枚举全量包轻得多。返回 null（序列太旧 / 不可用）时按「有变化」处理。
+     */
+    private fun hasPackageChanges(): Boolean {
+        val sequence = cachedSequence
+        if (sequence < 0) return true
+        val changed = runCatching { packageManager.getChangedPackages(sequence) }.getOrNull()
+            ?: return true
+        return changed.packageNames.isNotEmpty()
+    }
+
+    /** 当前包序列号；API 26+ 才有，取 0 号序列会返回全量变更的快照。 */
+    private fun currentPackageSequence(): Int = runCatching {
+        packageManager.getChangedPackages(0)?.sequenceNumber ?: 0
+    }.getOrDefault(0)
+
+    private fun storeCache(apps: List<AppInfo>) {
+        synchronized(cacheLock) {
+            appCache = apps
+            cachedSequence = currentPackageSequence()
+            cacheTime = System.currentTimeMillis()
+        }
+    }
+
 
     /**
      * root 通道：`pm list packages -f -U` 拿到全量包名与 APK 路径。
@@ -79,6 +119,7 @@ class AppRepository(
             lastUpdateTime = info?.lastUpdateTime ?: 0L,
             icon = application?.let { loadIcon(entry.packageName, it) },
             sourceDir = apkPath,
+            firstInstallTime = info?.firstInstallTime ?: 0L,
         )
     }
 
@@ -98,6 +139,7 @@ class AppRepository(
                 lastUpdateTime = info.lastUpdateTime,
                 icon = loadIcon(packageName, application),
                 sourceDir = application.sourceDir.orEmpty(),
+                firstInstallTime = info.firstInstallTime,
             )
         }
 
@@ -257,5 +299,33 @@ class AppRepository(
             "/my_product/",
             "/my_heytap/",
         )
+
+        // 进程级缓存：每次进入「已安装应用」都 new 一个 repository，所以缓存放在 companion。
+        private val cacheLock = Any()
+
+        @Volatile
+        private var appCache: List<AppInfo>? = null
+
+        /** `getChangedPackages` 的序列号；-1 表示还没有有效缓存。 */
+        @Volatile
+        private var cachedSequence: Int = -1
+
+        @Volatile
+        private var cacheTime: Long = 0L
+
+        /** 只读快照；没有缓存返回 null。 */
+        fun cachedApps(): List<AppInfo>? = appCache
+
+        fun cacheAgeMillis(): Long =
+            if (appCache == null) -1L else System.currentTimeMillis() - cacheTime
+
+        /** 包变化广播 / 卸载 / 安装后调用，下一次 [loadApps] 会重新全量扫描。 */
+        fun invalidateCache() {
+            synchronized(cacheLock) {
+                appCache = null
+                cachedSequence = -1
+                cacheTime = 0L
+            }
+        }
     }
 }
