@@ -293,6 +293,7 @@ fun BrowserScreen(
                         viewModel.setActive(PaneId.LEFT)
                         nameDialog = NameDialogState(NameDialogMode.NEW_FOLDER, defaultFolderName)
                     },
+                    onPullRefresh = { viewModel.refresh(PaneId.LEFT) },
                     modifier = Modifier.weight(1f),
                 )
                 if (state.dualPane) {
@@ -326,6 +327,7 @@ fun BrowserScreen(
                             viewModel.setActive(PaneId.RIGHT)
                             nameDialog = NameDialogState(NameDialogMode.NEW_FOLDER, defaultFolderName)
                         },
+                        onPullRefresh = { viewModel.refresh(PaneId.RIGHT) },
                         modifier = Modifier.weight(1f),
                     )
                 }

@@ -138,7 +138,14 @@ class BrowserViewModel : ViewModel() {
     fun refresh(pane: PaneId) {
         val current = paneState(pane)
         if (current.path.isEmpty()) return
-        load(pane, current.path, current.history, current.historyIndex, keepEntries = true)
+        load(
+            pane = pane,
+            path = current.path,
+            history = current.history,
+            historyIndex = current.historyIndex,
+            keepEntries = true,
+            refreshing = true,
+        )
     }
 
     fun refreshAll() {
@@ -617,6 +624,7 @@ class BrowserViewModel : ViewModel() {
         history: List<String>,
         historyIndex: Int,
         keepEntries: Boolean = false,
+        refreshing: Boolean = false,
     ) {
         loadJobs[pane]?.cancel()
         val pathChanged = path != paneState(pane).path
@@ -626,6 +634,7 @@ class BrowserViewModel : ViewModel() {
                 history = history,
                 historyIndex = historyIndex,
                 loading = true,
+                refreshing = refreshing,
                 error = null,
                 entries = if (keepEntries) it.entries else emptyList(),
                 // 切换目录时退出选择态；刷新同一目录保留选择
@@ -642,6 +651,7 @@ class BrowserViewModel : ViewModel() {
                     current.copy(
                         entries = entries,
                         loading = false,
+                        refreshing = false,
                         error = null,
                         selected = current.selected.intersect(present),
                     )
@@ -651,12 +661,20 @@ class BrowserViewModel : ViewModel() {
             } catch (cancel: CancellationException) {
                 // 被更新的加载取消时清掉 loading，避免界面永久停在骨架屏
                 updatePane(pane) { current ->
-                    if (current.path == path) current.copy(loading = false) else current
+                    if (current.path == path) {
+                        current.copy(loading = false, refreshing = false)
+                    } else {
+                        current
+                    }
                 }
                 throw cancel
             } catch (error: Exception) {
                 updatePane(pane) {
-                    it.copy(loading = false, error = error.toUserMessage(path))
+                    it.copy(
+                        loading = false,
+                        refreshing = false,
+                        error = error.toUserMessage(path),
+                    )
                 }
             }
         }

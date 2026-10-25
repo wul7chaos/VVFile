@@ -3,6 +3,8 @@ package com.vvfile.app.feature.browser
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,21 +24,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +58,7 @@ import com.vvfile.app.ui.components.FileRow
  *
  * 列表滚动位置由调用方持有（每窗格一份 LazyListState），路径变化时由调用方回到顶部。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaneContent(
     pane: PaneState,
@@ -62,6 +70,7 @@ fun PaneContent(
     onToggleSelect: (FileEntry) -> Unit,
     onRetry: () -> Unit,
     onNewFolder: () -> Unit,
+    onPullRefresh: () -> Unit,
     showDetails: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -110,53 +119,128 @@ fun PaneContent(
             }
         }
 
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            when {
-                pane.error != null -> ErrorState(pane.error, onRetry)
-                pane.loading && pane.entries.isEmpty() -> LoadingState()
-                pane.entries.isEmpty() -> EmptyState(onNewFolder)
-                visibleEntries.isEmpty() -> FilterEmptyState()
-                else -> LazyColumn(
-                    state = listState,
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.dp),
-                ) {
-                    items(visibleEntries, key = { it.path }) { entry ->
-                        FileRow(
-                            entry = entry,
-                            isSelected = entry.path in pane.selected,
-                            showDetails = showDetails,
-                            onClick = {
-                                if (pane.selectionMode) {
-                                    onToggleSelect(entry)
-                                } else if (entry.isDirectory) {
-                                    onOpenDir(entry.path)
-                                } else {
-                                    onOpenFile(entry)
-                                }
-                            },
-                            onLongClick = { onToggleSelect(entry) },
-                            onSwipeSelect = { onToggleSelect(entry) },
-                        )
+        val pullState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = pane.refreshing,
+            onRefresh = onPullRefresh,
+            state = pullState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            indicator = {
+                val fraction = pullState.distanceFraction.coerceIn(0f, 1f)
+                if (pane.refreshing || fraction > 0.02f) {
+                    PullHint(
+                        fraction = fraction,
+                        refreshing = pane.refreshing,
+                        accent = accent,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
+                }
+            },
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                when {
+                    pane.error != null -> ErrorState(pane.error, onRetry)
+                    pane.loading && pane.entries.isEmpty() -> LoadingState()
+                    pane.entries.isEmpty() -> EmptyState(onNewFolder)
+                    visibleEntries.isEmpty() -> FilterEmptyState()
+                    else -> LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.dp),
+                    ) {
+                        items(visibleEntries, key = { it.path }) { entry ->
+                            FileRow(
+                                entry = entry,
+                                isSelected = entry.path in pane.selected,
+                                showDetails = showDetails,
+                                onClick = {
+                                    if (pane.selectionMode) {
+                                        onToggleSelect(entry)
+                                    } else if (entry.isDirectory) {
+                                        onOpenDir(entry.path)
+                                    } else {
+                                        onOpenFile(entry)
+                                    }
+                                },
+                                onLongClick = { onToggleSelect(entry) },
+                                onSwipeSelect = { onToggleSelect(entry) },
+                            )
+                        }
                     }
                 }
-            }
-            if (pane.loading && pane.entries.isNotEmpty()) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .align(Alignment.TopCenter),
-                    color = accent,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
+                // 下拉刷新自己会画顶部细线，别叠两条
+                if (pane.loading && pane.entries.isNotEmpty() && !pane.refreshing) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .align(Alignment.TopCenter),
+                        color = accent,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    )
+                }
             }
         }
     }
 }
 
+/**
+ * 下拉过程中的小提示（模仿 MT：拖到阈值前提示「下拉刷新」，越过后提示「释放刷新」）。
+ *
+ * [fraction] 是 0..1 的拉动比例，箭头随比例旋转，整块提示也跟着手指下移一点，
+ * 松开后由 [refreshing] 接管，显示「刷新中…」和一条矩形进度条。
+ */
 @Composable
-private fun LoadingState() {
-    Column(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp)) {
+private fun PullHint(
+    fraction: Float,
+    refreshing: Boolean,
+    accent: Color,
+    modifier: Modifier = Modifier,
+) {
+    val armed = fraction >= 1f
+    val shift = if (refreshing) 0f else fraction * 22f
+    Row(
+        modifier = modifier
+            .graphicsLayer { translationY = shift.dp.toPx() }
+            .clip(RectangleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (refreshing) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .width(26.dp)
+                    .height(2.dp),
+                color = accent,
+                trackColor = MaterialTheme.colorScheme.surface,
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.ArrowDownward,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier
+                    .size(14.dp)
+                    .graphicsLayer { rotationZ = if (armed) 180f else fraction * 160f },
+            )
+        }
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = when {
+                refreshing -> "刷新中…"
+                armed -> "释放刷新"
+                else -> "下拉刷新"
+            },
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun LoadingState() {    Column(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp)) {
         Text(
             text = stringResource(R.string.ui_loading),
             style = MaterialTheme.typography.labelMedium,
@@ -178,7 +262,13 @@ private fun LoadingState() {
 
 @Composable
 private fun FilterEmptyState() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    // 空/错状态也套一层可滚动容器，否则下拉刷新没有可消费的滚动事件
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        contentAlignment = Alignment.Center,
+    ) {
         Text(
             text = "没有匹配的条目",
             fontSize = 13.sp,
@@ -190,7 +280,10 @@ private fun FilterEmptyState() {
 @Composable
 private fun EmptyState(onNewFolder: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -241,7 +334,10 @@ private fun EmptyState(onNewFolder: () -> Unit) {
 private fun ErrorState(message: String, onRetry: () -> Unit) {
     val error = MaterialTheme.colorScheme.error
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

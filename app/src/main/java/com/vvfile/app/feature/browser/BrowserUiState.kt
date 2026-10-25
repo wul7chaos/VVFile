@@ -13,6 +13,8 @@ data class PaneState(
     val history: List<String> = emptyList(),
     val historyIndex: Int = -1,
     val loading: Boolean = true,
+    /** 下拉刷新进行中：与 [loading] 分开，避免普通导航时误显示下拉指示器。 */
+    val refreshing: Boolean = false,
     val error: String? = null,
     /** 已选条目的绝对路径集合；非空即处于选择态。 */
     val selected: Set<String> = emptySet(),
