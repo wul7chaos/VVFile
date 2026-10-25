@@ -528,20 +528,22 @@ private fun PlayerSettingsSheet(
     onPickSubtitle: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f))
-            .clickable(onClick = onDismiss),
-        contentAlignment = Alignment.BottomCenter,
-    ) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        // 遮罩单独一层，点空白关闭；面板本身不参与点击，避免点面板内部时被关掉
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f))
+                .clickable(onClick = onDismiss),
+        )
         Surface(
             shape = RectangleShape,
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 620.dp)
-                .clickable(enabled = false) {},
+                // 吃掉面板内的空白点击，避免穿透到遮罩把面板关掉
+                .pointerInput(Unit) { detectTapGestures { } },
         ) {
             Column(
                 Modifier
