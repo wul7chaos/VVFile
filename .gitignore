@@ -24,3 +24,6 @@ desktop.ini
 *.log
 *.hprof
 docs/shots/*.tmp
+
+# ---- 外部参考仓库（只用于研究，不参与构建） ----
+termux-app/

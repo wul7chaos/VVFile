@@ -152,6 +152,8 @@ fun TerminalScreen(
             override fun paste(text: String) {
                 input = input.copy(text = input.text + text, selection = TextRange(input.text.length + text.length))
             }
+
+            override fun clear() = viewModel.clear()
         },
         onHistoryUp = {
             viewModel.historyUp()?.let { input = TextFieldValue(it, TextRange(it.length)) }
@@ -181,6 +183,7 @@ internal interface TerminalMenuActions {
     val keepScreenOn: Boolean
     fun toggleKeepScreenOn()
     fun endSession()
+    fun clear()
     fun reset()
     fun openSettings()
     fun paste(text: String)
@@ -329,6 +332,13 @@ private fun TerminalTopBar(
                 )
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenuOpenChange(false) }) {
+                DropdownMenuItem(
+                    text = { Text("清空") },
+                    onClick = {
+                        onMenuOpenChange(false)
+                        onMenu.clear()
+                    },
+                )
                 DropdownMenuItem(
                     text = { Text(if (onMenu.keepScreenOn) "唤醒锁 ✓" else "唤醒锁") },
                     onClick = {
@@ -726,6 +736,7 @@ private fun TerminalContentPreview() {
                 override fun reset() = Unit
                 override fun openSettings() = Unit
                 override fun paste(text: String) = Unit
+                override fun clear() = Unit
             },
             onHistoryUp = {},
             onHistoryDown = {},

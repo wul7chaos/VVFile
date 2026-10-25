@@ -49,6 +49,14 @@ class TerminalViewModel(
         val active = session ?: return
         if (active.status.value != TerminalStatus.RUNNING) return
 
+        // clear / cls 是 shell 内建之外的屏幕动作：无 PTY 时 clear 输出的转义序列会被剥离，
+        // 所以这里直接清屏，效果和真终端一致。
+        if (isClearCommand(text)) {
+            clear()
+            _state.update { it.copy(historyIndex = -1) }
+            return
+        }
+
         active.echo(_state.value.prompt, text)
         _state.update { it.copy(historyIndex = -1) }
 
@@ -128,6 +136,9 @@ class TerminalViewModel(
         session = null
         super.onCleared()
     }
+
+    private fun isClearCommand(text: String): Boolean =
+        text == "clear" || text == "cls" || text == "clear -x" || text == "cls -x"
 
     private fun isSuCommand(text: String): Boolean =
         text == "su" || text == "su -" || text == "sudo su" || text == "su root"
