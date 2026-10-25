@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import androidx.core.graphics.drawable.toBitmap
 import com.vvfile.app.core.path.WorkspaceLayout
@@ -137,6 +138,7 @@ class AppRepository(
         return runCatching { context.startActivity(intent) }.isSuccess
     }
 
+    /** 打开系统「应用信息」页（弹窗里的「更多」）。 */
     fun openAppInfo(packageName: String) {
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
             data = Uri.fromParts("package", packageName, null)
@@ -144,6 +146,48 @@ class AppRepository(
         }
         runCatching { context.startActivity(intent) }
     }
+
+    /**
+     * 读取「应用信息」弹窗需要的字段。
+     *
+     * PackageManager 查不到（root 枚举到、但应用层不可见的包）时退回 [AppDetails.from]，
+     * 只展示列表里已有的信息，不编造签名 / 加固 / UID 等拿不到的内容。
+     */
+    @Suppress("DEPRECATION")
+    suspend fun loadDetails(app: AppInfo): AppDetails = withContext(Dispatchers.IO) {
+        val info = runCatching { packageManager.getPackageInfo(app.packageName, 0) }.getOrNull()
+        val application = info?.applicationInfo
+        val apkPath = application?.sourceDir?.takeIf { it.isNotBlank() } ?: app.sourceDir
+        val nativeAbis = readNativeAbis(apkPath)
+        if (info == null) return@withContext AppDetails.from(app, nativeAbis)
+        AppDetails(
+            packageName = app.packageName,
+            label = runCatching { application?.loadLabel(packageManager)?.toString() }
+                .getOrNull()
+                ?.takeIf { it.isNotBlank() }
+                ?: app.label,
+            versionName = info.versionName.orEmpty(),
+            versionCode = versionCodeOf(info),
+            apkSizeBytes = runCatching { File(apkPath).length() }.getOrDefault(app.apkSizeBytes),
+            nativeAbis = nativeAbis,
+            dataDir = application?.dataDir,
+            externalDataDir = File(
+                Environment.getExternalStorageDirectory(),
+                "Android/data/${app.packageName}",
+            ).absolutePath,
+            apkPath = apkPath,
+            firstInstallTime = info.firstInstallTime,
+            lastUpdateTime = info.lastUpdateTime,
+            icon = application?.let { loadIcon(app.packageName, it) } ?: app.icon,
+        )
+    }
+
+    /** 从 APK 的 `lib/<abi>/` 读出原生架构；读不到（纯 Java、路径不可读）返回空列表。 */
+    private fun readNativeAbis(apkPath: String): List<String> = runCatching {
+        java.util.zip.ZipFile(apkPath).use { zip ->
+            parseAbisFromEntries(zip.entries().asSequence().map { it.name })
+        }
+    }.getOrDefault(emptyList())
 
     fun requestUninstall(packageName: String) {
         val intent = Intent(Intent.ACTION_DELETE).apply {

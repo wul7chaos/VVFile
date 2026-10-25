@@ -161,6 +161,19 @@ fun AppListScreen(
         )
     }
 
+    state.details?.let { details ->
+        AppDetailsDialog(
+            details = details,
+            onDismiss = viewModel::dismissDetails,
+            onMore = viewModel::openSystemAppInfo,
+            onExtract = {
+                val app = state.detailsApp
+                viewModel.dismissDetails()
+                if (app != null) viewModel.export(app)
+            },
+        )
+    }
+
     val exportingPackage = state.exportingPackage
     if (exportingPackage != null) {
         val app = state.apps.firstOrNull { it.packageName == exportingPackage }

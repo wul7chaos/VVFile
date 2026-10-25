@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.vvfile.app.core.path.WorkspaceLayout
+import com.vvfile.app.data.app.AppDetails
 import com.vvfile.app.data.app.AppInfo
 import com.vvfile.app.data.app.AppRepository
 import kotlinx.coroutines.CancellationException
@@ -60,7 +61,31 @@ class AppListViewModel(
         }
     }
 
-    fun openAppInfo(app: AppInfo) = repository.openAppInfo(app.packageName)
+    /** 打开「应用信息」弹窗：字段在 IO 线程读取，读完再一次性更新状态。 */
+    fun openAppInfo(app: AppInfo) {
+        _state.update { it.copy(detailsApp = app, details = AppDetails.from(app)) }
+        viewModelScope.launch {
+            val details = runCatching { repository.loadDetails(app) }.getOrNull() ?: return@launch
+            // 期间用户可能已经关掉弹窗或换了目标，只有仍是同一个包才落地。
+            _state.update { current ->
+                if (current.detailsApp?.packageName == app.packageName) {
+                    current.copy(details = details)
+                } else {
+                    current
+                }
+            }
+        }
+    }
+
+    fun dismissDetails() {
+        _state.update { it.copy(details = null, detailsApp = null) }
+    }
+
+    /** 弹窗里的「更多」：跳到系统「应用信息」页。 */
+    fun openSystemAppInfo() {
+        val app = _state.value.detailsApp ?: return
+        repository.openAppInfo(app.packageName)
+    }
 
     fun requestUninstall(app: AppInfo) {
         if (app.isSystem) {
