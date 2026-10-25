@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,16 +41,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -138,11 +142,13 @@ internal fun TerminalContent(
     modifier: Modifier = Modifier,
     fontSizeSp: Float = 13f,
 ) {
-    val textStyle = remember(fontSizeSp) { terminalTextStyle(fontSizeSp) }
+    val palette = terminalPalette()
+    val textStyle = remember(fontSizeSp, palette) { terminalTextStyle(fontSizeSp, palette.foreground) }
+    CompositionLocalProvider(LocalTerminalPalette provides palette) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(TerminalBackground)
+            .background(palette.background)
             .statusBarsPadding()
             .imePadding(),
     ) {
@@ -152,7 +158,7 @@ internal fun TerminalContent(
             onClear = onClear,
             onClose = onClose,
         )
-        HorizontalDivider(color = TerminalDivider)
+        HorizontalDivider(color = palette.divider)
         state.error?.let { message ->
             TerminalErrorBanner(message = message)
         }
@@ -165,7 +171,7 @@ internal fun TerminalContent(
             enabled = state.running,
             onQuickCommand = onQuickCommand,
         )
-        HorizontalDivider(color = TerminalDivider)
+        HorizontalDivider(color = palette.divider)
         TerminalInputRow(
             input = input,
             prompt = if (state.sessionType == TerminalSessionType.ROOT) "#" else "\$",
@@ -177,6 +183,7 @@ internal fun TerminalContent(
             onHistoryDown = onHistoryDown,
         )
     }
+    }
 }
 
 @Composable
@@ -186,6 +193,7 @@ private fun TerminalTopBar(
     onClear: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val palette = LocalTerminalPalette.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -197,7 +205,7 @@ private fun TerminalTopBar(
             text = stringResource(R.string.terminal_title),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            color = TerminalForeground,
+            color = palette.foreground,
         )
         Spacer(Modifier.weight(1f))
         FilterChip(
@@ -215,14 +223,14 @@ private fun TerminalTopBar(
             Icon(
                 imageVector = Icons.Outlined.ClearAll,
                 contentDescription = stringResource(R.string.terminal_clear),
-                tint = TerminalMuted,
+                tint = palette.muted,
             )
         }
         IconButton(onClick = onClose) {
             Icon(
                 imageVector = Icons.Outlined.Close,
                 contentDescription = stringResource(R.string.terminal_close),
-                tint = TerminalForeground,
+                tint = palette.foreground,
             )
         }
     }
@@ -256,12 +264,14 @@ private fun TerminalOutput(
         }
     }
 
-    SelectionContainer {
+    // 注意：weight 必须落在 Column 的直接子节点上，所以挂在 SelectionContainer；
+    // 挂在里面的 LazyColumn 上会被忽略，输出区不铺满、底部留白。
+    SelectionContainer(modifier = modifier.fillMaxWidth()) {
         LazyColumn(
             state = listState,
-            modifier = modifier
-                .fillMaxWidth()
-                .background(TerminalBackground),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(LocalTerminalPalette.current.background),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         ) {
             itemsIndexed(lines) { _, line ->
@@ -273,7 +283,8 @@ private fun TerminalOutput(
 
 @Composable
 private fun TerminalLineText(line: TerminalLine, textStyle: TextStyle) {
-    val annotated = remember(line) { line.toAnnotatedString() }
+    val palette = LocalTerminalPalette.current
+    val annotated = remember(line, palette) { line.toAnnotatedString(palette) }
     Text(
         text = if (annotated.text.isEmpty()) AnnotatedString(" ") else annotated,
         style = textStyle,
@@ -286,6 +297,7 @@ private fun QuickCommandBar(
     enabled: Boolean,
     onQuickCommand: (String) -> Unit,
 ) {
+    val palette = LocalTerminalPalette.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -297,12 +309,18 @@ private fun QuickCommandBar(
         Text(
             text = stringResource(R.string.terminal_quick_commands),
             style = MaterialTheme.typography.labelSmall,
-            color = TerminalMuted,
+            color = palette.muted,
         )
         QUICK_COMMANDS.forEach { command ->
             AssistChip(
                 onClick = { onQuickCommand(command) },
                 enabled = enabled,
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = palette.surface,
+                    labelColor = palette.foreground,
+                    disabledContainerColor = palette.surface,
+                    disabledLabelColor = palette.muted,
+                ),
                 label = {
                     Text(
                         text = command,
@@ -326,17 +344,18 @@ private fun TerminalInputRow(
     onHistoryUp: () -> Unit,
     onHistoryDown: () -> Unit,
 ) {
+    val palette = LocalTerminalPalette.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(TerminalSurface)
+            .background(palette.surface)
             .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = prompt,
             style = textStyle,
-            color = TerminalGreen,
+            color = palette.accent,
         )
         Spacer(Modifier.width(8.dp))
         BasicTextField(
@@ -347,7 +366,7 @@ private fun TerminalInputRow(
                 .padding(vertical = 10.dp),
             textStyle = textStyle,
             singleLine = true,
-            cursorBrush = SolidColor(TerminalGreen),
+            cursorBrush = SolidColor(palette.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onSubmit() }),
             decorationBox = { innerTextField ->
@@ -356,7 +375,7 @@ private fun TerminalInputRow(
                         Text(
                             text = stringResource(R.string.terminal_input_hint),
                             style = textStyle,
-                            color = TerminalMuted,
+                            color = palette.muted,
                         )
                     }
                     innerTextField()
@@ -367,27 +386,27 @@ private fun TerminalInputRow(
             Icon(
                 imageVector = Icons.Outlined.KeyboardArrowUp,
                 contentDescription = stringResource(R.string.terminal_history_up),
-                tint = if (running) TerminalMuted else TerminalMuted.copy(alpha = 0.35f),
+                tint = if (running) palette.muted else palette.muted.copy(alpha = 0.35f),
             )
         }
         IconButton(onClick = onHistoryDown, enabled = running) {
             Icon(
                 imageVector = Icons.Outlined.KeyboardArrowDown,
                 contentDescription = stringResource(R.string.terminal_history_down),
-                tint = if (running) TerminalMuted else TerminalMuted.copy(alpha = 0.35f),
+                tint = if (running) palette.muted else palette.muted.copy(alpha = 0.35f),
             )
         }
         IconButton(onClick = onSubmit, enabled = running && input.isNotBlank()) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.Send,
                 contentDescription = stringResource(R.string.terminal_send),
-                tint = if (running && input.isNotBlank()) TerminalGreen else TerminalMuted.copy(alpha = 0.35f),
+                tint = if (running && input.isNotBlank()) palette.accent else palette.muted.copy(alpha = 0.35f),
             )
         }
     }
 }
 
-private fun TerminalLine.toAnnotatedString(): AnnotatedString = buildAnnotatedString {
+private fun TerminalLine.toAnnotatedString(palette: TerminalPalette): AnnotatedString = buildAnnotatedString {
     if (spans.isEmpty()) {
         append(text)
         return@buildAnnotatedString
@@ -396,7 +415,7 @@ private fun TerminalLine.toAnnotatedString(): AnnotatedString = buildAnnotatedSt
     spans.forEach { span ->
         withStyle(
             SpanStyle(
-                color = span.color.toComposeColor(),
+                color = palette.ansi(span.color),
                 fontWeight = if (span.bold) FontWeight.Bold else FontWeight.Normal,
             ),
         ) {
@@ -410,40 +429,93 @@ private fun TerminalLine.toAnnotatedString(): AnnotatedString = buildAnnotatedSt
     }
 }
 
-private fun TerminalColor.toComposeColor(): Color = when (this) {
-    TerminalColor.DEFAULT -> TerminalForeground
-    TerminalColor.BLACK -> Color(0xFF5C6370)
-    TerminalColor.RED -> Color(0xFFE06C75)
-    TerminalColor.GREEN -> Color(0xFF98C379)
-    TerminalColor.YELLOW -> Color(0xFFE5C07B)
-    TerminalColor.BLUE -> Color(0xFF61AFEF)
-    TerminalColor.MAGENTA -> Color(0xFFC678DD)
-    TerminalColor.CYAN -> Color(0xFF56B6C2)
-    TerminalColor.WHITE -> Color(0xFFD7DEE8)
-    TerminalColor.BRIGHT_BLACK -> Color(0xFF7F8794)
-    TerminalColor.BRIGHT_RED -> Color(0xFFFF7B86)
-    TerminalColor.BRIGHT_GREEN -> Color(0xFFB5E890)
-    TerminalColor.BRIGHT_YELLOW -> Color(0xFFFFD68A)
-    TerminalColor.BRIGHT_BLUE -> Color(0xFF8CC8FF)
-    TerminalColor.BRIGHT_MAGENTA -> Color(0xFFE29BFF)
-    TerminalColor.BRIGHT_CYAN -> Color(0xFF7FE0EA)
-    TerminalColor.BRIGHT_WHITE -> Color(0xFFFFFFFF)
+/**
+ * 终端配色：跟随主题明暗，浅色主题下不再是一片黑。
+ *
+ * ANSI 16 色分别给深/浅两套表，保证两种背景下都能看清。
+ */
+private class TerminalPalette(
+    val background: Color,
+    val surface: Color,
+    val divider: Color,
+    val foreground: Color,
+    val muted: Color,
+    val accent: Color,
+    private val ansiTable: Map<TerminalColor, Color>,
+) {
+    fun ansi(color: TerminalColor): Color = ansiTable[color] ?: foreground
 }
 
-private val TerminalBackground = Color(0xFF0B0E13)
-private val TerminalSurface = Color(0xFF12161E)
-private val TerminalDivider = Color(0xFF232A35)
-private val TerminalForeground = Color(0xFFD7DEE8)
-private val TerminalMuted = Color(0xFF7F8794)
-private val TerminalGreen = Color(0xFF34D399)
+private val DarkTerminalPalette = TerminalPalette(
+    background = Color(0xFF0B0E13),
+    surface = Color(0xFF12161E),
+    divider = Color(0xFF232A35),
+    foreground = Color(0xFFD7DEE8),
+    muted = Color(0xFF7F8794),
+    accent = Color(0xFF34D399),
+    ansiTable = mapOf(
+        TerminalColor.BLACK to Color(0xFF5C6370),
+        TerminalColor.RED to Color(0xFFE06C75),
+        TerminalColor.GREEN to Color(0xFF98C379),
+        TerminalColor.YELLOW to Color(0xFFE5C07B),
+        TerminalColor.BLUE to Color(0xFF61AFEF),
+        TerminalColor.MAGENTA to Color(0xFFC678DD),
+        TerminalColor.CYAN to Color(0xFF56B6C2),
+        TerminalColor.WHITE to Color(0xFFD7DEE8),
+        TerminalColor.BRIGHT_BLACK to Color(0xFF7F8794),
+        TerminalColor.BRIGHT_RED to Color(0xFFFF7B86),
+        TerminalColor.BRIGHT_GREEN to Color(0xFFB5E890),
+        TerminalColor.BRIGHT_YELLOW to Color(0xFFFFD68A),
+        TerminalColor.BRIGHT_BLUE to Color(0xFF8CC8FF),
+        TerminalColor.BRIGHT_MAGENTA to Color(0xFFE29BFF),
+        TerminalColor.BRIGHT_CYAN to Color(0xFF7FE0EA),
+        TerminalColor.BRIGHT_WHITE to Color(0xFFFFFFFF),
+    ),
+)
 
-private fun terminalTextStyle(fontSizeSp: Float): TextStyle = TextStyle(
+private val LightTerminalPalette = TerminalPalette(
+    background = Color(0xFFFFFFFF),
+    surface = Color(0xFFEFF2F7),
+    divider = Color(0xFFDCE0E8),
+    foreground = Color(0xFF1B1F27),
+    muted = Color(0xFF5A6270),
+    accent = Color(0xFF0B8A5F),
+    ansiTable = mapOf(
+        TerminalColor.BLACK to Color(0xFF3F4653),
+        TerminalColor.RED to Color(0xFFB3261E),
+        TerminalColor.GREEN to Color(0xFF1B6E3C),
+        TerminalColor.YELLOW to Color(0xFF7A5A00),
+        TerminalColor.BLUE to Color(0xFF1A4F8A),
+        TerminalColor.MAGENTA to Color(0xFF7B2E8E),
+        TerminalColor.CYAN to Color(0xFF0B6172),
+        TerminalColor.WHITE to Color(0xFF2A2F3A),
+        TerminalColor.BRIGHT_BLACK to Color(0xFF525A68),
+        TerminalColor.BRIGHT_RED to Color(0xFFC0392B),
+        TerminalColor.BRIGHT_GREEN to Color(0xFF14783F),
+        TerminalColor.BRIGHT_YELLOW to Color(0xFF8A6500),
+        TerminalColor.BRIGHT_BLUE to Color(0xFF1F5FA8),
+        TerminalColor.BRIGHT_MAGENTA to Color(0xFF8E35A3),
+        TerminalColor.BRIGHT_CYAN to Color(0xFF0E7490),
+        TerminalColor.BRIGHT_WHITE to Color(0xFF11141A),
+    ),
+)
+
+private val LocalTerminalPalette = staticCompositionLocalOf { DarkTerminalPalette }
+
+@Composable
+private fun terminalPalette(): TerminalPalette =
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+        DarkTerminalPalette
+    } else {
+        LightTerminalPalette
+    }
+
+private fun terminalTextStyle(fontSizeSp: Float, color: Color): TextStyle = TextStyle(
     fontFamily = FontFamily.Monospace,
     fontSize = fontSizeSp.sp,
     lineHeight = (fontSizeSp * 1.45f).sp,
-    color = TerminalForeground,
+    color = color,
 )
-
 private val QUICK_COMMANDS = listOf("ls", "cd", "pwd", "id", "whoami")
 
 @Preview(showBackground = true, backgroundColor = 0xFF0B0E13)
