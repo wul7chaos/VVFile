@@ -14,4 +14,12 @@ data class FileEntry(
 ) {
     val extension: String
         get() = if (isDirectory) "" else name.substringAfterLast('.', "").lowercase()
+
+    /** 可执行脚本：点击时弹「执行/编辑/设置」菜单，而不是直接进编辑器。 */
+    val isScript: Boolean
+        get() = !isDirectory && extension in SCRIPT_EXTENSIONS
+
+    private companion object {
+        val SCRIPT_EXTENSIONS = setOf("sh", "bash")
+    }
 }

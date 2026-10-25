@@ -108,6 +108,11 @@ import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
+import com.vvfile.app.core.script.ScriptEnv
+import com.vvfile.app.core.script.ScriptExecutionPrefs
+import com.vvfile.app.core.script.ScriptRunResult
+import com.vvfile.app.core.script.ScriptRunner
+import com.vvfile.app.core.shell.RootManager
 import com.vvfile.app.core.share.FileSharer
 import com.vvfile.app.data.file.FileProperties
 import com.vvfile.app.data.file.FilePropertyReader
@@ -183,6 +188,11 @@ fun BrowserScreen(
     val defaultFileName = stringResource(R.string.ui_ops_default_file)
     val defaultZipName = stringResource(R.string.ui_ops_zip_default_multi)
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var scriptTarget by remember { mutableStateOf<FileEntry?>(null) }
+    var scriptResult by remember { mutableStateOf<Pair<String, ScriptRunResult>?>(null) }
+    val scriptRunner = remember { ScriptRunner() }
+    var scriptEnv by remember { mutableStateOf(ScriptExecutionPrefs.env) }
+    var scriptPermission by remember { mutableStateOf(ScriptExecutionPrefs.permission) }
     var nameDialog by remember { mutableStateOf<NameDialogState?>(null) }
 
     // 一次性操作提示：展示后立即消费，避免重组重复弹出
@@ -286,7 +296,9 @@ fun BrowserScreen(
                     },
                     onOpenFile = { entry ->
                         viewModel.setActive(PaneId.LEFT)
-                        if (onOpenFile != null) {
+                        if (entry.isScript) {
+                            scriptTarget = entry
+                        } else if (onOpenFile != null) {
                             onOpenFile(entry.path)
                         } else {
                             Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
@@ -320,7 +332,9 @@ fun BrowserScreen(
                         },
                         onOpenFile = { entry ->
                             viewModel.setActive(PaneId.RIGHT)
-                            if (onOpenFile != null) {
+                            if (entry.isScript) {
+                                scriptTarget = entry
+                            } else if (onOpenFile != null) {
                                 onOpenFile(entry.path)
                             } else {
                                 Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
@@ -409,6 +423,57 @@ fun BrowserScreen(
 
     if (showAbout) {
         AboutDialog(onDismiss = { showAbout = false })
+    }
+
+    scriptTarget?.let { entry ->
+        ScriptRunDialog(
+            fileName = entry.name,
+            env = scriptEnv,
+            permission = scriptPermission,
+            onEnvChange = {
+                scriptEnv = it
+                ScriptExecutionPrefs.env = it
+            },
+            onPermissionChange = {
+                scriptPermission = it
+                ScriptExecutionPrefs.permission = it
+            },
+            onEdit = {
+                scriptTarget = null
+                if (onOpenFile != null) {
+                    onOpenFile(entry.path)
+                }
+            },
+            onRun = {
+                scriptTarget = null
+                if (scriptEnv == ScriptEnv.ROOT && !RootManager.isAvailable()) {
+                    Toast.makeText(context, R.string.terminal_root_unavailable, Toast.LENGTH_SHORT).show()
+                } else {
+                    val target = entry
+                    val env = scriptEnv
+                    val permission = scriptPermission
+                    scope.launch {
+                        val outcome = runCatching {
+                            scriptRunner.run(target.path, env, permission)
+                        }.getOrNull()
+                        if (outcome != null) {
+                            scriptResult = target.name to outcome
+                        } else {
+                            Toast.makeText(context, "执行失败", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            },
+            onDismiss = { scriptTarget = null },
+        )
+    }
+
+    scriptResult?.let { (name, outcome) ->
+        ScriptResultDialog(
+            fileName = name,
+            result = outcome,
+            onDismiss = { scriptResult = null },
+        )
     }
 
     properties?.let { info ->
