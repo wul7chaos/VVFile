@@ -79,8 +79,9 @@ fun PaneContent(
     Column(
         modifier = modifier
             .fillMaxHeight()
+            // 选中窗格用更深的底色，未选中用浅一档：反过来的话深色主题下「选中」反而更亮
             .background(
-                if (active) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.background,
+                if (active) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface,
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
