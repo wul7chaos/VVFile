@@ -200,6 +200,7 @@ fun BrowserScreen(
     val scriptRunner = remember { ScriptRunner() }
     var scriptEnv by remember { mutableStateOf(ScriptExecutionPrefs.env) }
     var scriptPermission by remember { mutableStateOf(ScriptExecutionPrefs.permission) }
+    var scriptCurrentMode by remember { mutableStateOf<PermissionMode?>(null) }
     var nameDialog by remember { mutableStateOf<NameDialogState?>(null) }
     /** 批量重命名的目标条目；非空时展示对话框。 */
     var batchRenameTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
@@ -236,18 +237,28 @@ fun BrowserScreen(
         }
     }
 
-    /** 单条改权限回填它自己的权限位；多条统一改，默认 644。 */
-    val openChmod: (List<FileEntry>) -> Unit = { entries ->
-        if (entries.size == 1) {
-            val path = entries.first().path
+    /**
+     * 打开脚本菜单：把文件**当前**的权限位读出来并预选。
+     *
+     * 这个面板里的权限是「执行前 chmod 成什么」，所以默认值必须是文件真实的权限，
+     * 而不是上一次记住的值——否则用户看到的和执行的实际值对不上。
+     */
+    val openScript: (FileEntry) -> Unit = { entry ->
+        val fromListing = entry.permissions?.let { PermissionMode.fromSymbolic(it) }
+        scriptCurrentMode = fromListing
+        if (fromListing != null) scriptPermission = fromListing.octal().takeLast(3)
+        scriptTarget = entry
+        if (fromListing == null) {
+            // 列表没带权限（部分 FUSE 卷），补读一次属性
             scope.launch {
-                val info = FilePropertyReader.read(path)
-                if (info != null) {
-                    chmodRequest = ChmodRequest(listOf(path), octalFromSymbolic(info.permissions))
+                val mode = runCatching { FilePropertyReader.read(entry.path) }.getOrNull()
+                    ?.permissions
+                    ?.let { PermissionMode.fromSymbolic(it) }
+                if (mode != null && scriptTarget?.path == entry.path) {
+                    scriptCurrentMode = mode
+                    scriptPermission = mode.octal().takeLast(3)
                 }
             }
-        } else if (entries.isNotEmpty()) {
-            chmodRequest = ChmodRequest(entries.map { it.path }, "644")
         }
     }
 
@@ -353,7 +364,7 @@ fun BrowserScreen(
                     onOpenFile = { entry ->
                         viewModel.setActive(PaneId.LEFT)
                         if (entry.isScript) {
-                            scriptTarget = entry
+                            openScript(entry)
                         } else if (onOpenFile != null) {
                             onOpenFile(entry.path)
                         } else {
@@ -390,7 +401,7 @@ fun BrowserScreen(
                         onOpenFile = { entry ->
                             viewModel.setActive(PaneId.RIGHT)
                             if (entry.isScript) {
-                                scriptTarget = entry
+                                openScript(entry)
                             } else if (onOpenFile != null) {
                                 onOpenFile(entry.path)
                             } else {
@@ -489,6 +500,7 @@ fun BrowserScreen(
             fileName = entry.name,
             env = scriptEnv,
             permission = scriptPermission,
+            currentMode = scriptCurrentMode,
             onEnvChange = {
                 scriptEnv = it
                 ScriptExecutionPrefs.env = it
@@ -554,7 +566,6 @@ fun BrowserScreen(
             onUnzipTo = { showUnzipTo = true },
             onProperties = { openProperties(targets) },
             onShare = { FileSharer.share(context, targets.map { it.path }) },
-            onChmod = { openChmod(targets) },
             onOpenWith = { openWithTarget = entry },
         )
     }
@@ -583,7 +594,10 @@ fun BrowserScreen(
             onDismiss = { properties = null },
             onChangePermissions = {
                 properties = null
-                chmodRequest = ChmodRequest(listOf(info.path), octalFromSymbolic(info.permissions))
+                chmodRequest = ChmodRequest(
+                    paths = listOf(info.path),
+                    mode = PermissionMode.fromSymbolic(info.permissions) ?: PermissionMode.DEFAULT,
+                )
             },
         )
     }
@@ -596,19 +610,24 @@ fun BrowserScreen(
                 aggregate = null
                 chmodRequest = ChmodRequest(
                     paths = info.paths,
-                    initialMode = info.commonPermissions?.let { octalFromSymbolic(it) } ?: "644",
+                    mode = info.commonPermissions?.let { PermissionMode.fromSymbolic(it) }
+                        ?: PermissionMode.DEFAULT,
                 )
             },
         )
     }
 
     chmodRequest?.let { request ->
-        ChmodDialog(
-            paths = request.paths,
-            initialMode = request.initialMode,
-            onConfirm = { mode ->
+        PermissionDialog(
+            summary = if (request.paths.size == 1) {
+                request.paths.first()
+            } else {
+                "已选 ${request.paths.size} 项"
+            },
+            initialMode = request.mode,
+            onConfirm = { octal ->
                 chmodRequest = null
-                viewModel.changePermissions(request.paths, mode)
+                viewModel.changePermissions(request.paths, octal)
             },
             onDismiss = { chmodRequest = null },
         )
@@ -1398,63 +1417,9 @@ private fun PropertiesDialog(
 }
 
 /**
- * 改权限对话框的入参。[paths] 为单条或整批，[initialMode] 是回填的八进制权限位。
+ * 改权限的入参：[paths] 为单条或整批，[mode] 是从属性页回填的当前权限位。
  */
-private data class ChmodRequest(val paths: List<String>, val initialMode: String)
-
-@Composable
-private fun ChmodDialog(
-    paths: List<String>,
-    initialMode: String,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var mode by remember { mutableStateOf(initialMode) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ui_chmod_title)) },
-        text = {
-            Column {
-                Text(
-                    text = if (paths.size == 1) paths.first() else "已选 ${paths.size} 项",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = mode,
-                    onValueChange = { mode = it },
-                    label = { Text(stringResource(R.string.ui_chmod_mode)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(mode.trim()) }) {
-                Text(stringResource(R.string.ui_chmod_apply))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.ui_filter_cancel))
-            }
-        },
-    )
-}
-
-private fun octalFromSymbolic(permissions: String): String {
-    if (permissions.length != 9) return "644"
-    return permissions.chunked(3).joinToString("") { group ->
-        var value = 0
-        if (group[0] == 'r') value += 4
-        if (group[1] == 'w') value += 2
-        if (group[2] == 'x') value += 1
-        value.toString()
-    }
-}
+private data class ChmodRequest(val paths: List<String>, val mode: PermissionMode)
 
 @Composable
 private fun PropertyRow(label: String, value: String) {

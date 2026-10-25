@@ -16,8 +16,6 @@
     <string name="ui_unzip_to_path">目标目录</string>
     <string name="ui_unzip_to_confirm">解压</string>
     <string name="ui_chmod_title">修改权限</string>
-    <string name="ui_chmod_mode">权限（如 755）</string>
-    <string name="ui_chmod_apply">应用</string>
     <string name="ui_ops_chmod_success">权限已更新</string>
     <string name="ui_root_disabled">root 访问已在设置中禁用</string>
     <string name="ui_root_prompt_title">访问系统分区</string>

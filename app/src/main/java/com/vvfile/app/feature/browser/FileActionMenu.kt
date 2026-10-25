@@ -24,7 +24,6 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Unarchive
@@ -89,7 +88,6 @@ fun FileActionMenu(
     onUnzipTo: () -> Unit,
     onProperties: () -> Unit,
     onShare: () -> Unit,
-    onChmod: () -> Unit,
     onOpenWith: () -> Unit,
 ) {
     val entry = target.entry
@@ -137,14 +135,6 @@ fun FileActionMenu(
 
                 if (toolsOpen) {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
-                        MenuRow(
-                            icon = Icons.Outlined.Lock,
-                            label = if (target.multi) "批量修改权限" else "修改权限",
-                            onClick = {
-                                onDismiss()
-                                onChmod()
-                            },
-                        )
                         MenuRow(
                             icon = Icons.Outlined.ContentCopy,
                             label = if (target.multi) "复制 ${target.count} 个路径" else "复制路径",

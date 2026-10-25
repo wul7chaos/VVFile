@@ -46,6 +46,7 @@ fun ScriptRunDialog(
     fileName: String,
     env: ScriptEnv,
     permission: String,
+    currentMode: PermissionMode?,
     onEnvChange: (ScriptEnv) -> Unit,
     onPermissionChange: (String) -> Unit,
     onEdit: () -> Unit,
@@ -66,7 +67,11 @@ fun ScriptRunDialog(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "请选择要执行的操作",
+                    text = if (currentMode == null) {
+                        "请选择要执行的操作"
+                    } else {
+                        "当前权限 ${currentMode.symbolic()}（${currentMode.octal()}）"
+                    },
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -78,6 +83,7 @@ fun ScriptRunDialog(
                     ScriptSettingsPanel(
                         env = env,
                         permission = permission,
+                        currentMode = currentMode,
                         onEnvChange = onEnvChange,
                         onPermissionChange = onPermissionChange,
                     )
@@ -107,6 +113,7 @@ fun ScriptRunDialog(
 private fun ScriptSettingsPanel(
     env: ScriptEnv,
     permission: String,
+    currentMode: PermissionMode?,
     onEnvChange: (ScriptEnv) -> Unit,
     onPermissionChange: (String) -> Unit,
 ) {
@@ -150,7 +157,17 @@ private fun ScriptSettingsPanel(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ScriptRunner.PERMISSIONS.forEach { mode ->
+            // 文件真实权限不在常用预设里时补一个格子，并放在最前面：
+            // 放末尾会被横向滚动挤出屏幕，等于看不到「当前是什么」
+            val modes = remember(currentMode) {
+                val current = currentMode?.octal()?.takeLast(3)
+                if (current != null && current !in ScriptRunner.PERMISSIONS) {
+                    listOf(current) + ScriptRunner.PERMISSIONS
+                } else {
+                    ScriptRunner.PERMISSIONS
+                }
+            }
+            modes.forEach { mode ->
                 val selected = mode == permission
                 Text(
                     text = mode,
