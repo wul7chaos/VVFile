@@ -145,6 +145,11 @@ class EditorViewModel(
         _state.update { it.copy(readOnlyMode = enabled) }
     }
 
+    /** 语法高亮开关。 */
+    fun toggleHighlight() {
+        _state.update { it.copy(highlight = !it.highlight) }
+    }
+
     fun toggleWrap() {
         _state.update { it.copy(wrap = !it.wrap) }
     }

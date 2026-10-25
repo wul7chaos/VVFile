@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -50,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
@@ -57,6 +60,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -68,6 +74,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.VerticalSplit
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Redo
@@ -175,6 +182,7 @@ private fun EditorScreenContent(
         onLineEndingChange = viewModel::setLineEnding,
         onToggleWrap = viewModel::toggleWrap,
         onToggleReadOnlyMode = viewModel::setReadOnlyMode,
+        onToggleHighlight = viewModel::toggleHighlight,
         onRetry = viewModel::load,
         onDismissError = viewModel::clearError,
         onDismissExit = viewModel::dismissExit,
@@ -206,6 +214,7 @@ internal fun EditorContent(
     onLineEndingChange: (LineEnding) -> Unit = {},
     onToggleWrap: () -> Unit = {},
     onToggleReadOnlyMode: (Boolean) -> Unit = {},
+    onToggleHighlight: () -> Unit = {},
     onRetry: () -> Unit,
     onDismissError: () -> Unit,
     onDismissExit: () -> Unit,
@@ -225,6 +234,7 @@ internal fun EditorContent(
     var showSaveAs by remember { mutableStateOf(false) }
     var showStats by remember { mutableStateOf(false) }
     var showGoto by remember { mutableStateOf(false) }
+    var layout by rememberSaveable(state.path) { mutableStateOf(PreviewLayout.SPLIT) }
     var gotoLineText by rememberSaveable { mutableStateOf("") }
     val matches = remember(fieldValue.text, query, matchCase, wholeWord) {
         findMatches(fieldValue.text, query, matchCase, wholeWord)
@@ -328,6 +338,16 @@ internal fun EditorContent(
             onToggleWrap = onToggleWrap,
             onToggleReadOnly = { onToggleReadOnlyMode(!state.readOnlyMode) },
             onCloseFile = onDiscard,
+            previewAvailable = PreviewKind.of(state.path) != PreviewKind.NONE,
+            layout = layout,
+            onCyclePreview = {
+                layout = when (layout) {
+                    PreviewLayout.SPLIT -> PreviewLayout.EDIT_ONLY
+                    PreviewLayout.EDIT_ONLY -> PreviewLayout.PREVIEW_ONLY
+                    PreviewLayout.PREVIEW_ONLY -> PreviewLayout.SPLIT
+                }
+            },
+            onToggleHighlight = onToggleHighlight,
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         if (state.readOnlyMode) {
@@ -391,29 +411,51 @@ internal fun EditorContent(
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         }
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            when {
-                state.loading -> LoadingState()
-                state.text.isEmpty() && state.error != null -> EditorErrorState(
-                    message = state.error.orEmpty(),
-                    onRetry = onRetry,
-                    onBack = onBack,
-                )
+        val previewKind = remember(state.path) { PreviewKind.of(state.path) }
+        val darkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+        val showEditor = previewKind == PreviewKind.NONE || layout != PreviewLayout.PREVIEW_ONLY
+        val showPreview = previewKind != PreviewKind.NONE && layout != PreviewLayout.EDIT_ONLY
 
-                else -> Column(Modifier.fillMaxSize()) {
-                    state.error?.let { message ->
-                        ErrorBanner(message = message, onDismiss = onDismissError)
+        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (showEditor) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    when {
+                        state.loading -> LoadingState()
+                        state.text.isEmpty() && state.error != null -> EditorErrorState(
+                            message = state.error.orEmpty(),
+                            onRetry = onRetry,
+                            onBack = onBack,
+                        )
+
+                        else -> Column(Modifier.fillMaxSize()) {
+                            state.error?.let { message ->
+                                ErrorBanner(message = message, onDismiss = onDismissError)
+                            }
+                            TextEditorBody(
+                                value = fieldValue,
+                                onValueChange = onValueChange,
+                                readOnly = state.editingBlocked,
+                                wrap = state.wrap,
+                                path = state.path,
+                                highlight = state.highlight,
+                                showLineNumbers = showLineNumbers,
+                                fontSizeSp = fontSizeSp,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
-                    TextEditorBody(
-                        value = fieldValue,
-                        onValueChange = onValueChange,
-                        readOnly = state.editingBlocked,
-                        wrap = state.wrap,
-                        showLineNumbers = showLineNumbers,
-                        fontSizeSp = fontSizeSp,
-                        modifier = Modifier.weight(1f),
-                    )
                 }
+            }
+            if (showEditor && showPreview) {
+                VerticalDivider(color = MaterialTheme.colorScheme.outline)
+            }
+            if (showPreview) {
+                PreviewPane(
+                    kind = previewKind,
+                    text = fieldValue.text,
+                    dark = darkTheme,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
         EditorStatusBar(state = state, fieldValue = fieldValue)
@@ -667,6 +709,10 @@ private fun EditorTopBar(
     onToggleWrap: () -> Unit,
     onToggleReadOnly: () -> Unit,
     onCloseFile: () -> Unit,
+    previewAvailable: Boolean,
+    layout: PreviewLayout,
+    onCyclePreview: () -> Unit,
+    onToggleHighlight: () -> Unit,
 ) {
     var editMenu by remember { mutableStateOf(false) }
     var moreMenu by remember { mutableStateOf(false) }
@@ -763,6 +809,20 @@ private fun EditorTopBar(
                     },
                 )
             }
+            if (previewAvailable) {
+                IconButton(onClick = onCyclePreview, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.VerticalSplit,
+                        contentDescription = "切换编辑/预览布局",
+                        tint = if (layout == PreviewLayout.SPLIT) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+
         }
 
         // 编辑：按行/选区的批量处理
@@ -906,6 +966,23 @@ private fun EditorTopBar(
                 )
                 HorizontalDivider()
                 DropdownMenuItem(
+                    text = { Text("语法高亮", fontSize = 13.sp) },
+                    trailingIcon = {
+                        if (state.highlight) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    },
+                    onClick = {
+                        moreMenu = false
+                        onToggleHighlight()
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text("自动换行", fontSize = 13.sp) },
                     trailingIcon = {
                         if (state.wrap) {
@@ -972,6 +1049,8 @@ private fun TextEditorBody(
     onValueChange: (TextFieldValue) -> Unit,
     readOnly: Boolean,
     wrap: Boolean = true,
+    path: String = "",
+    highlight: Boolean = true,
     showLineNumbers: Boolean,
     fontSizeSp: Float = 13f,
     modifier: Modifier = Modifier,
@@ -987,6 +1066,26 @@ private fun TextEditorBody(
     }
     val lineCount = remember(value.text) { value.text.count { it == '\n' } + 1 }
     val gutterVisible = showLineNumbers && lineCount <= MAX_GUTTER_LINES
+    val darkForSyntax = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    // 语法高亮：只在开关打开、且文件不太大时计算；否则用空表，视觉上等同纯文本
+    val syntaxSpans = remember(value.text, path, highlight, darkForSyntax) {
+        if (!highlight) {
+            emptyList()
+        } else {
+            EditorSyntax.spans(value.text, path, darkForSyntax)
+        }
+    }
+    val syntaxTransformation = remember(syntaxSpans) {
+        VisualTransformation { text ->
+            TransformedText(
+                text = AnnotatedString(
+                    text = text.text,
+                    spanStyles = syntaxSpans.filter { it.start < text.length && it.end <= text.length },
+                ),
+                offsetMapping = OffsetMapping.Identity,
+            )
+        }
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -1019,6 +1118,7 @@ private fun TextEditorBody(
                     textStyle = monoStyle.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     readOnly = readOnly,
+                    visualTransformation = syntaxTransformation,
                 )
             }
         }

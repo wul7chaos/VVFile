@@ -36,6 +36,8 @@ data class EditorUiState(
     val lineEnding: LineEnding = LineEnding.LF,
     /** 自动换行（关掉后长行横向滚动）。 */
     val wrap: Boolean = true,
+    /** 语法高亮开关（常见代码文件）。 */
+    val highlight: Boolean = true,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
 ) {
