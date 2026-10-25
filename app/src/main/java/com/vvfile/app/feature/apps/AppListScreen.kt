@@ -71,6 +71,7 @@ import com.vvfile.app.data.app.AppInfo
 fun AppListScreen(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenPath: ((String) -> Unit)? = null,
     viewModel: AppListViewModel = viewModel(factory = AppListViewModel.factory()),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -170,6 +171,10 @@ fun AppListScreen(
                 val app = state.detailsApp
                 viewModel.dismissDetails()
                 if (app != null) viewModel.export(app)
+            },
+            onOpenPath = { path ->
+                viewModel.dismissDetails()
+                onOpenPath?.invoke(path)
             },
         )
     }

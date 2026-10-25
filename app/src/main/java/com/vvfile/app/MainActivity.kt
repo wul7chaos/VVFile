@@ -78,9 +78,13 @@ class MainActivity : ComponentActivity() {
                 var showSettings by remember { mutableStateOf(false) }
                 var showTerminal by remember { mutableStateOf(false) }
                 var showApps by remember { mutableStateOf(false) }
+                // 「应用信息」点数据目录后带到浏览器的目标路径
+                var browseTarget by remember { mutableStateOf<String?>(null) }
 
                 Box(Modifier.fillMaxSize()) {
                     BrowserScreen(
+                        navigateTo = browseTarget,
+                        onNavigateHandled = { browseTarget = null },
                         onOpenFile = { path ->
                             if (MimeTypes.isText(path)) {
                                 editingPath = path
@@ -148,6 +152,10 @@ class MainActivity : ComponentActivity() {
                         AppListScreen(
                             onClose = { showApps = false },
                             modifier = Modifier.fillMaxSize(),
+                            onOpenPath = { path ->
+                                showApps = false
+                                browseTarget = path
+                            },
                         )
                     }
                 }

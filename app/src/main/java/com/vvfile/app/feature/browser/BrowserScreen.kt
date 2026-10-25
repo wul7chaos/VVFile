@@ -115,6 +115,7 @@ import com.vvfile.app.data.prefs.Settings as AppSettings
 import com.vvfile.app.ui.components.PathBar
 import com.vvfile.app.ui.theme.VVDanger
 import com.vvfile.app.ui.theme.VVWarn
+import java.io.File
 import kotlinx.coroutines.launch
 
 @Composable
@@ -122,6 +123,9 @@ fun BrowserScreen(
     viewModel: BrowserViewModel = viewModel(),
     onOpenFile: ((String) -> Unit)? = null,
     onToolClick: ((String) -> Unit)? = null,
+    /** 外部（如应用信息弹窗）请求跳转的路径；消费后回调 [onNavigateHandled]。 */
+    navigateTo: String? = null,
+    onNavigateHandled: (() -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -191,16 +195,27 @@ fun BrowserScreen(
         viewModel.consumeMessage()
     }
 
-    // 返回键收敛顺序：选择态 → 抽屉 → 交给系统（退出）
-    BackHandler(enabled = selectionActive || drawerState.isOpen) {
+    // 外部跳转请求（应用信息弹窗点数据目录）：交给当前窗格，消费后清空
+    LaunchedEffect(navigateTo) {
+        val target = navigateTo ?: return@LaunchedEffect
+        viewModel.navigate(state.active, target)
+        onNavigateHandled?.invoke()
+    }
+
+    // 返回键 / 全面屏侧滑：选择态 → 抽屉 → 上一层目录；到根目录才交给系统退出
+    val canNavigateUp = remember(activePane.path) { File(activePane.path).parent != null }
+    BackHandler(enabled = selectionActive || drawerState.isOpen || canNavigateUp) {
         when {
             selectionActive -> viewModel.clearSelection(state.active)
             drawerState.isOpen -> scope.launch { drawerState.close() }
+            canNavigateUp -> viewModel.navigateUp(state.active)
         }
     }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // 侧滑手势留给系统返回（上一层目录），抽屉只从菜单按钮打开，避免边滑被抽屉截走
+        gesturesEnabled = false,
         drawerContent = {
             DrawerContent(state) { tool ->
                 scope.launch { drawerState.close() }

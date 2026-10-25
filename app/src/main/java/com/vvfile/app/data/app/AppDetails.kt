@@ -50,34 +50,6 @@ data class AppDetails(
     }
 }
 
-/** 判断「这个 APK 能不能在 ARM / x86 设备上跑」。 */
-enum class AbiArch(val label: String) {
-    ARM("ARM"),
-    X86("x86"),
-}
-
-/**
- * 该架构能否直接运行：
- * - 纯 Java/Kotlin（没有 `lib/`）：两边都能跑；
- * - 有原生库：只有对应架构的 so 才能直接跑，否则要靠系统/模拟器的转译层。
- */
-fun runsNatively(nativeAbis: List<String>, arch: AbiArch): Boolean {
-    if (nativeAbis.isEmpty()) return true
-    return nativeAbis.any { abi ->
-        when (arch) {
-            AbiArch.ARM -> abi.startsWith("arm")
-            AbiArch.X86 -> abi.startsWith("x86")
-        }
-    }
-}
-
-/** 给 UI 用的一句话结论。 */
-fun abiSummary(details: AppDetails, arch: AbiArch): String = when {
-    details.pureJava -> "可直接运行（纯 Java/Kotlin）"
-    runsNatively(details.nativeAbis, arch) -> "可直接运行"
-    else -> "需转译，可能装不上或闪退"
-}
-
 /**
  * 从 ZIP 条目名解析原生架构，条目名形如 `lib/arm64-v8a/libfoo.so`。
  *

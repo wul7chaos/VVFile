@@ -1,7 +1,10 @@
 package com.vvfile.app.feature.apps
 
 import android.os.Build
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,9 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.vvfile.app.core.format.SizeFormatter
-import com.vvfile.app.data.app.AbiArch
 import com.vvfile.app.data.app.AppDetails
-import com.vvfile.app.data.app.abiSummary
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,9 +49,10 @@ import java.util.Locale
  * 「应用信息」弹窗，字段参照 MT 管理器的属性页。
  *
  * 刻意不做签名状态 / 加固状态 / UID：这三项要么得解析 APK 签名块，要么得读内核 uid 表，
- * 与应用本身「文件管理」的定位不符。
+ * 与应用本身「文件管理」的定位不符；目标 / 最低系统也换成了更实用的「目标架构」。
  *
- * 路径类字段一律单行 + 横向滚动，避免长包名把整行撑爆。
+ * 交互：点任意一行复制该行的值；数据目录类行点击直接跳转目录，长按复制。
+ * 路径类字段单行 + 横向滚动，避免长包名把整行撑爆。
  */
 @Composable
 fun AppDetailsDialog(
@@ -55,7 +60,14 @@ fun AppDetailsDialog(
     onDismiss: () -> Unit,
     onMore: () -> Unit,
     onExtract: () -> Unit,
+    onOpenPath: (String) -> Unit = {},
 ) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val copy: (String) -> Unit = { value ->
+        clipboard.setText(AnnotatedString(value))
+        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -115,9 +127,13 @@ fun AppDetailsDialog(
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
             Column(Modifier.padding(vertical = 8.dp)) {
-                DetailRow("包名", details.packageName)
-                DetailRow("版本号", details.versionCode.toString())
-                DetailRow("安装包大小", SizeFormatter.format(details.apkSizeBytes))
+                DetailRow("包名", details.packageName, onCopy = copy)
+                DetailRow("版本号", details.versionCode.toString(), onCopy = copy)
+                DetailRow(
+                    label = "安装包大小",
+                    value = SizeFormatter.format(details.apkSizeBytes),
+                    onCopy = copy,
+                )
                 DetailRow(
                     label = "目标架构",
                     value = if (details.pureJava) {
@@ -126,19 +142,22 @@ fun AppDetailsDialog(
                         details.nativeAbis.joinToString(", ")
                     },
                     scrollable = false,
+                    onCopy = copy,
                 )
-                DetailRow("ARM 运行", abiSummary(details, AbiArch.ARM))
-                DetailRow("x86 运行", abiSummary(details, AbiArch.X86))
-                details.dataDir?.takeIf { it.isNotBlank() }?.let { DetailRow("数据目录", it) }
-                details.externalDataDir?.takeIf { it.isNotBlank() }?.let {
-                    DetailRow("数据目录 2", it)
+                details.dataDir?.takeIf { it.isNotBlank() }?.let {
+                    DetailRow("数据目录", it, onCopy = copy, onOpen = onOpenPath)
                 }
-                if (details.apkPath.isNotBlank()) DetailRow("APK 路径", details.apkPath)
+                details.externalDataDir?.takeIf { it.isNotBlank() }?.let {
+                    DetailRow("数据目录 2", it, onCopy = copy, onOpen = onOpenPath)
+                }
+                if (details.apkPath.isNotBlank()) {
+                    DetailRow("APK 路径", details.apkPath, onCopy = copy)
+                }
                 if (details.firstInstallTime > 0L) {
-                    DetailRow("首次安装", formatTime(details.firstInstallTime))
+                    DetailRow("首次安装", formatTime(details.firstInstallTime), onCopy = copy)
                 }
                 if (details.lastUpdateTime > 0L) {
-                    DetailRow("最后更新", formatTime(details.lastUpdateTime))
+                    DetailRow("最后更新", formatTime(details.lastUpdateTime), onCopy = copy)
                 }
             }
 
@@ -157,12 +176,34 @@ fun AppDetailsDialog(
     }
 }
 
-/** 一行「标签 + 值」；[scrollable] 为 true 时单行横向滚动，否则按需换行。 */
+/**
+ * 一行「标签 + 值」。
+ *
+ * - [onCopy] 非空时整行可点（复制值），长按同样复制；
+ * - [onOpen] 非空时点击改为跳转（用于数据目录），长按仍然是复制；
+ * - [scrollable] 为 true 时单行横向滚动，否则按需换行。
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DetailRow(label: String, value: String, scrollable: Boolean = true) {
+private fun DetailRow(
+    label: String,
+    value: String,
+    scrollable: Boolean = true,
+    onCopy: ((String) -> Unit)? = null,
+    onOpen: ((String) -> Unit)? = null,
+) {
+    val interaction = if (onCopy == null && onOpen == null) {
+        Modifier
+    } else {
+        Modifier.combinedClickable(
+            onClick = { onOpen?.invoke(value) ?: onCopy?.invoke(value) },
+            onLongClick = { onCopy?.invoke(value) },
+        )
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(interaction)
             .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

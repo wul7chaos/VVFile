@@ -655,7 +655,9 @@ class BrowserViewModel : ViewModel() {
                 }
                 throw cancel
             } catch (error: Exception) {
-                updatePane(pane) { it.copy(loading = false, error = error.toUserMessage()) }
+                updatePane(pane) {
+                    it.copy(loading = false, error = error.toUserMessage(path))
+                }
             }
         }
     }
@@ -670,10 +672,29 @@ class BrowserViewModel : ViewModel() {
         }
     }
 
-    private fun Exception.toUserMessage(): String = when (this) {
+    private fun Exception.toUserMessage(target: String): String = when (this) {
         is SecurityException -> "没有权限读取此目录"
-        is FileNotFoundException -> message ?: "目录不存在"
+        is FileNotFoundException ->
+            // Android 11+ 的 FUSE 会把「别人的 Android/data、obb」报成 ENOENT，文案要说人话
+            if (isRestrictedSharedDir(target)) {
+                "系统限制访问其他应用的 Android/data、Android/obb 目录"
+            } else {
+                message ?: "目录不存在"
+            }
+
         else -> message ?: "读取失败"
+    }
+
+    /** 共享存储里被系统保护的目录（其他应用的 Android/data、Android/obb）。 */
+    private fun isRestrictedSharedDir(path: String): Boolean {
+        val normalized = path.replace('\\', '/').trimEnd('/')
+        return RESTRICTED_DIR_SUFFIXES.any { suffix ->
+            normalized.endsWith(suffix) || normalized.contains("$suffix/")
+        }
+    }
+
+    private companion object {
+        val RESTRICTED_DIR_SUFFIXES = listOf("/Android/data", "/Android/obb")
     }
 }
 
