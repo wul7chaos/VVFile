@@ -188,10 +188,23 @@ class BrowserViewModel : ViewModel() {
         }
     }
 
-    fun swapPanes() {
-        _state.update { s ->
-            val left = s.left
-            s.copy(left = s.right.copy(loading = s.right.loading), right = left.copy(loading = left.loading))
+    /**
+     * 把**未选中**窗格的路径同步成选中窗格的路径（底部「同步」）。
+     *
+     * 原来是「交换」：两边路径对调。实际用起来多是「我想在同一个目录里双窗格对照」，
+     * 交换完还得再点回来，所以改成单向同步。
+     */
+    fun syncOtherPane() {
+        val s = _state.value
+        val source = if (s.active == PaneId.LEFT) s.left else s.right
+        val target = if (s.active == PaneId.LEFT) PaneId.RIGHT else PaneId.LEFT
+        if (source.path.isEmpty()) return
+        if (paneState(target).path == source.path) return
+        navigate(target, source.path)
+        // 同步只该改对侧的路径，活动窗格必须留在原地：
+        // 底栏按钮挨着窗格，误触到对侧窗格会把活动窗格抢走，这里兜一次
+        if (_state.value.active != s.active) {
+            _state.update { it.copy(active = s.active) }
         }
     }
 

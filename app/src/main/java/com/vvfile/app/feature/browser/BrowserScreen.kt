@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -54,7 +55,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -181,6 +182,13 @@ fun BrowserScreen(
     }
 
     val activePane = if (state.active == PaneId.LEFT) state.left else state.right
+    /** 共享存储根（`/storage/emulated/0`），顶部菜单「回到根目录」用它。 */
+    val sharedRoot = remember {
+        runCatching { Environment.getExternalStorageDirectory()?.absolutePath }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: "/storage/emulated/0"
+    }
 
     val settings by remember { PrefsRepository.get(context).settings }
         .collectAsStateWithLifecycle(initialValue = AppSettings.DEFAULT)
@@ -282,13 +290,15 @@ fun BrowserScreen(
         onNavigateHandled?.invoke()
     }
 
-    // 返回键 / 全面屏侧滑：选择态 → 抽屉 → 上一层目录；到根目录才交给系统退出
+    // 返回键 / 全面屏侧滑：选择态 → 抽屉 → 上一层目录。
+    // 已经在根目录时**什么都不做**：以前这里不拦，一滑就把应用退回桌面，误触成本太高。
     val canNavigateUp = remember(activePane.path) { File(activePane.path).parent != null }
-    BackHandler(enabled = selectionActive || drawerState.isOpen || canNavigateUp) {
+    BackHandler(enabled = true) {
         when {
             selectionActive -> viewModel.clearSelection(state.active)
             drawerState.isOpen -> scope.launch { drawerState.close() }
             canNavigateUp -> viewModel.navigateUp(state.active)
+            else -> Unit
         }
     }
 
@@ -333,9 +343,12 @@ fun BrowserScreen(
                     onActiveChange = viewModel::setActive,
                     onMenu = { scope.launch { drawerState.open() } },
                     showHidden = state.showHidden,
-                    onRefresh = viewModel::refreshAll,
                     onToggleHidden = viewModel::toggleHidden,
-                    onSwap = viewModel::swapPanes,
+                    onSync = viewModel::syncOtherPane,
+                    onHome = {
+                        // 回共享存储根；路径没变时 navigate 里会走刷新
+                        viewModel.navigate(state.active, sharedRoot)
+                    },
                 )
             }
 
@@ -464,7 +477,7 @@ fun BrowserScreen(
                     onNewFile = {
                         nameDialog = NameDialogState(NameDialogMode.NEW_FILE, defaultFileName)
                     },
-                    onSwap = viewModel::swapPanes,
+                    onSync = viewModel::syncOtherPane,
                     onUp = { viewModel.navigateUp(state.active) },
                 )
             }
@@ -750,9 +763,9 @@ private fun BrowserTopBar(
     onActiveChange: (PaneId) -> Unit,
     onMenu: () -> Unit,
     showHidden: Boolean,
-    onRefresh: () -> Unit,
     onToggleHidden: () -> Unit,
-    onSwap: () -> Unit,
+    onSync: () -> Unit,
+    onHome: () -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     Row(
@@ -795,11 +808,11 @@ private fun BrowserTopBar(
             }
             DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                 DropdownMenuItem(
-                    text = { Text("刷新") },
-                    leadingIcon = { Icon(Icons.Outlined.Refresh, contentDescription = null) },
+                    text = { Text("回到根目录") },
+                    leadingIcon = { Icon(Icons.Outlined.Home, contentDescription = null) },
                     onClick = {
                         overflowOpen = false
-                        onRefresh()
+                        onHome()
                     },
                 )
                 DropdownMenuItem(
@@ -816,11 +829,11 @@ private fun BrowserTopBar(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text("交换窗格") },
-                    leadingIcon = { Icon(Icons.Outlined.SwapHoriz, contentDescription = null) },
+                    text = { Text("同步窗格") },
+                    leadingIcon = { Icon(Icons.Outlined.Sync, contentDescription = null) },
                     onClick = {
                         overflowOpen = false
-                        onSwap()
+                        onSync()
                     },
                 )
             }
@@ -1024,7 +1037,7 @@ private fun BrowserBottomBar(
     onForward: () -> Unit,
     onNewFolder: () -> Unit,
     onNewFile: () -> Unit,
-    onSwap: () -> Unit,
+    onSync: () -> Unit,
     onUp: () -> Unit,
 ) {
     var newOpen by remember { mutableStateOf(false) }
@@ -1066,7 +1079,7 @@ private fun BrowserBottomBar(
                 )
             }
         }
-        NavAction(Icons.Outlined.SwapHoriz, "交换", true, Modifier.weight(1f), onSwap)
+        NavAction(Icons.Outlined.Sync, "同步", true, Modifier.weight(1f), onSync)
         NavAction(Icons.Outlined.ArrowUpward, "上级", pane.path != "/", Modifier.weight(1f), onUp)
     }
 }
