@@ -7,7 +7,6 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.KeyEvent
 import androidx.lifecycle.AndroidViewModel
 import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalSession
@@ -114,8 +113,6 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         runCatching { terminalView.handleKeyCode(keyCode, keyMod) }
             .onFailure { Log.w(TAG, "handleKeyCode($keyCode) 失败", it) }
     }
-
-    fun sendEnter() = sendKeyCode(KeyEvent.KEYCODE_ENTER)
 
     fun toggleCtrl() {
         _ctrlHeld.value = !_ctrlHeld.value
