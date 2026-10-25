@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
@@ -1128,9 +1129,12 @@ private fun TextEditorBody(
         // 输入框至少撑满视口，点在文字下方的空白处也能聚焦
         val fieldMinHeight = maxOf(0.dp, viewportHeight - 16.dp)
         var contentHeightPx by remember { mutableIntStateOf(0) }
+        var contentWidthPx by remember { mutableIntStateOf(0) }
         val density = LocalDensity.current
         val viewportPx = with(density) { viewportHeight.toPx() }
+        val viewportWidthPx = with(density) { maxWidth.toPx() }
         val contentPx = contentHeightPx.toFloat()
+        val contentWidth = contentWidthPx.toFloat()
 
         Row(
             modifier = Modifier
@@ -1151,8 +1155,9 @@ private fun TextEditorBody(
                     value = value,
                     onValueChange = onValueChange,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = fieldMinHeight),
+                        .then(if (wrap) Modifier.fillMaxWidth() else Modifier)
+                        .heightIn(min = fieldMinHeight)
+                        .onSizeChanged { contentWidthPx = it.width },
                     textStyle = monoStyle.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     readOnly = readOnly,
@@ -1173,6 +1178,20 @@ private fun TextEditorBody(
                     .width(14.dp),
             )
         }
+
+        // 横向滚动条：仅在关闭「自动换行」且内容超宽时出现
+        if (!wrap && contentWidth > viewportWidthPx + 1f && viewportWidthPx > 0f) {
+            EditorHorizontalScrollbar(
+                scrollState = horizontalScroll,
+                viewportPx = viewportWidthPx,
+                contentPx = contentWidth,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = if (gutterVisible) 46.dp else 0.dp, end = 14.dp)
+                    .height(14.dp),
+            )
+        }
     }
 }
 
@@ -1182,6 +1201,71 @@ private fun TextEditorBody(
  * 轨道整条可点（点哪跳到哪），滑块可直接拖动；拖动时加粗并加深颜色。
  * 自己画而不是用系统 Scrollbar，是为了在「输入框撑满视口」的布局里也能贴合内容高度。
  */
+
+/**
+ * 编辑器横向滚动条（关闭「自动换行」时用）。逻辑与纵向一致：轨道可点、滑块可拖。
+ */
+@Composable
+private fun EditorHorizontalScrollbar(
+    scrollState: ScrollState,
+    viewportPx: Float,
+    contentPx: Float,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    var dragging by remember { mutableStateOf(false) }
+    val maxScrollPx = (contentPx - viewportPx).coerceAtLeast(1f)
+    val minThumbPx = with(density) { 36.dp.toPx() }
+    val thumbPx = (viewportPx * viewportPx / contentPx).coerceAtLeast(minThumbPx)
+    val travelPx = (viewportPx - thumbPx).coerceAtLeast(1f)
+    val currentPx = scrollState.value.toFloat().coerceIn(0f, maxScrollPx)
+    val thumbOffsetPx = (currentPx / maxScrollPx) * travelPx
+    val accent = MaterialTheme.colorScheme.onSurfaceVariant
+
+    fun scrollToFraction(fraction: Float) {
+        val target = (fraction.coerceIn(0f, 1f) * maxScrollPx).roundToInt()
+        scope.launch { scrollState.scrollTo(target) }
+    }
+
+    Box(
+        modifier = modifier
+            .pointerInput(maxScrollPx, travelPx) {
+                detectTapGestures { offset ->
+                    scrollToFraction((offset.x - thumbPx / 2f) / travelPx)
+                }
+            }
+            .pointerInput(maxScrollPx, travelPx) {
+                detectHorizontalDragGestures(
+                    onDragStart = { dragging = true },
+                    onDragEnd = { dragging = false },
+                    onDragCancel = { dragging = false },
+                ) { change, dragAmount ->
+                    change.consume()
+                    val deltaScroll = dragAmount / travelPx * maxScrollPx
+                    val target = (scrollState.value + deltaScroll).coerceIn(0f, maxScrollPx)
+                    scope.launch { scrollState.scrollTo(target.roundToInt()) }
+                }
+            }
+            .padding(bottom = 2.dp),
+        contentAlignment = Alignment.BottomStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(accent.copy(alpha = 0.16f)),
+        )
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(thumbOffsetPx.roundToInt(), 0) }
+                .width(with(density) { thumbPx.toDp() })
+                .height(if (dragging) 8.dp else 6.dp)
+                .background(accent.copy(alpha = if (dragging) 0.85f else 0.55f)),
+        )
+    }
+}
+
 @Composable
 private fun EditorVerticalScrollbar(
     scrollState: ScrollState,
