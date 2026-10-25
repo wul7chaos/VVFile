@@ -194,6 +194,11 @@ class MainActivity : ComponentActivity() {
                             onClose = { showTerminal = false },
                             modifier = Modifier.fillMaxSize(),
                             fontSizeSp = settings.terminalFontSize.toFloat(),
+                            onFontSizeChange = { size ->
+                                lifecycleScope.launch {
+                                    PrefsRepository.get(this@MainActivity).setTerminalFontSize(size)
+                                }
+                            },
                         )
                     }
 
