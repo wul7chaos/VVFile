@@ -78,6 +78,7 @@ fun PaneContent(
     onOpenDir: (String) -> Unit,
     onOpenFile: (FileEntry) -> Unit,
     onToggleSelect: (FileEntry) -> Unit,
+    onLongPress: (FileEntry) -> Unit,
     onRetry: () -> Unit,
     onNewFolder: () -> Unit,
     onPullRefresh: () -> Unit,
@@ -194,7 +195,7 @@ fun PaneContent(
                                         onOpenFile(entry)
                                     }
                                 },
-                                onLongClick = { onToggleSelect(entry) },
+                                onLongClick = { onLongPress(entry) },
                                 onSwipeSelect = { onToggleSelect(entry) },
                             )
                         }

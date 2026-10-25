@@ -108,6 +108,7 @@ import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
+import com.vvfile.app.core.format.MimeTypes
 import com.vvfile.app.core.script.ScriptEnv
 import com.vvfile.app.core.script.ScriptExecutionPrefs
 import com.vvfile.app.core.script.ScriptRunResult
@@ -187,6 +188,8 @@ fun BrowserScreen(
     val defaultFolderName = stringResource(R.string.ui_ops_default_folder)
     val defaultFileName = stringResource(R.string.ui_ops_default_file)
     val defaultZipName = stringResource(R.string.ui_ops_zip_default_multi)
+    var actionTarget by remember { mutableStateOf<FileActionTarget?>(null) }
+    var openWithTarget by remember { mutableStateOf<FileEntry?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var scriptTarget by remember { mutableStateOf<FileEntry?>(null) }
     var scriptResult by remember { mutableStateOf<Pair<String, ScriptRunResult>?>(null) }
@@ -304,6 +307,12 @@ fun BrowserScreen(
                             Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
                         }
                     },
+                    onLongPress = { entry ->
+                        viewModel.setActive(PaneId.LEFT)
+                        viewModel.clearSelection(PaneId.LEFT)
+                        viewModel.toggleSelect(PaneId.LEFT, entry.path)
+                        actionTarget = FileActionTarget(entry, PaneId.LEFT)
+                    },
                     onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.LEFT, entry.path) },
                     onRetry = { viewModel.refresh(PaneId.LEFT) },
                     onNewFolder = {
@@ -339,6 +348,12 @@ fun BrowserScreen(
                             } else {
                                 Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
                             }
+                        },
+                        onLongPress = { entry ->
+                            viewModel.setActive(PaneId.RIGHT)
+                            viewModel.clearSelection(PaneId.RIGHT)
+                            viewModel.toggleSelect(PaneId.RIGHT, entry.path)
+                            actionTarget = FileActionTarget(entry, PaneId.RIGHT)
                         },
                         onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.RIGHT, entry.path) },
                         onRetry = { viewModel.refresh(PaneId.RIGHT) },
@@ -473,6 +488,48 @@ fun BrowserScreen(
             fileName = name,
             result = outcome,
             onDismiss = { scriptResult = null },
+        )
+    }
+
+    actionTarget?.let { target ->
+        val entry = target.entry
+        FileActionMenu(
+            target = target,
+            onDismiss = { actionTarget = null },
+            onCopy = viewModel::copySelectionToOtherPane,
+            onMove = viewModel::moveSelectionToOtherPane,
+            onDelete = { showDeleteConfirm = true },
+            onRename = { nameDialog = NameDialogState(NameDialogMode.RENAME, entry.name) },
+            onCompress = {
+                val base = entry.name.substringBeforeLast('.').ifBlank { entry.name }
+                nameDialog = NameDialogState(NameDialogMode.ZIP, "$base.zip")
+            },
+            onUnzip = viewModel::unzipSelection,
+            onUnzipTo = { showUnzipTo = true },
+            onProperties = {
+                scope.launch { properties = FilePropertyReader.read(entry.path) }
+            },
+            onShare = { FileSharer.share(context, listOf(entry.path)) },
+            onChmod = {
+                scope.launch {
+                    val info = FilePropertyReader.read(entry.path)
+                    if (info != null) chmodTarget = info
+                }
+            },
+            onOpenWith = { openWithTarget = entry },
+        )
+    }
+
+    openWithTarget?.let { entry ->
+        OpenWithDialog(
+            path = entry.path,
+            fileName = entry.name,
+            onEditText = if (MimeTypes.isText(entry.path)) {
+                { onOpenFile?.invoke(entry.path) }
+            } else {
+                null
+            },
+            onDismiss = { openWithTarget = null },
         )
     }
 
