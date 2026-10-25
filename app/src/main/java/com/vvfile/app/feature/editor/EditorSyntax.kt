@@ -40,7 +40,8 @@ object EditorSyntax {
             "dart" -> SyntaxLanguage.DART
             "sh", "bash", "zsh" -> SyntaxLanguage.SHELL
             "coffee" -> SyntaxLanguage.COFFEESCRIPT
-            "json", "xml", "yaml", "yml", "toml", "ini", "properties",
+            "json", "xml", "html", "htm", "xhtml", "css", "scss", "less",
+            "yaml", "yml", "toml", "ini", "properties",
             "gradle", "md", "markdown", "txt", "log", "csv",
             -> SyntaxLanguage.DEFAULT
             else -> null
@@ -55,9 +56,52 @@ object EditorSyntax {
     fun spans(text: String, path: String, dark: Boolean): List<AnnotatedString.Range<SpanStyle>> {
         val language = languageFor(path) ?: return emptyList()
         if (text.isEmpty() || text.length > MAX_HIGHLIGHT_CHARS) return emptyList()
-        return runCatching { compute(text, language, dark) }.getOrDefault(emptyList())
+        return runCatching {
+            if (isMarkup(path)) markupSpans(text, dark) else compute(text, language, dark)
+        }.getOrDefault(emptyList())
     }
 
+    /** HTML / XML / SVG 这类标记语言，库没有对应语言，这里用正则补一套着色。 */
+    private fun markupSpans(
+        text: String,
+        dark: Boolean,
+    ): List<AnnotatedString.Range<SpanStyle>> {
+        val tag = if (dark) 0xFF61AFEF else 0xFF1A4F8A
+        val attr = if (dark) 0xFFE5C07B else 0xFF7A5A00
+        val value = if (dark) 0xFF98C379 else 0xFF1B6E3C
+        val comment = if (dark) 0xFF7F8794 else 0xFF5A6270
+        val spans = ArrayList<AnnotatedString.Range<SpanStyle>>()
+
+        fun add(start: Int, end: Int, color: Long) {
+            if (start in 0 until end && end <= text.length) {
+                spans.add(
+                    AnnotatedString.Range(SpanStyle(color = Color(color.toInt())), start, end),
+                )
+            }
+        }
+
+        Regex("<!--[\\s\\S]*?-->").findAll(text).forEach { m ->
+            add(m.range.first, m.range.last + 1, comment)
+        }
+        // 标签名（含结束标签与自闭合）
+        Regex("</?([A-Za-z][\\w:.-]*)").findAll(text).forEach { m ->
+            add(m.range.first, m.range.last + 1, tag)
+        }
+        // 属性名（后面跟着 =）
+        Regex("[A-Za-z_:][\\w:.-]*(?=\\s*=)").findAll(text).forEach { m ->
+            add(m.range.first, m.range.last + 1, attr)
+        }
+        // 属性值
+        Regex("\"[^\"]*\"|'[^']*'").findAll(text).forEach { m ->
+            add(m.range.first, m.range.last + 1, value)
+        }
+        return spans
+    }
+
+    private fun isMarkup(path: String): Boolean {
+        val ext = path.substringAfterLast('/').substringAfterLast('.', "").lowercase()
+        return ext in setOf("html", "htm", "xhtml", "xml", "svg", "vue")
+    }
     private fun compute(
         text: String,
         language: SyntaxLanguage,

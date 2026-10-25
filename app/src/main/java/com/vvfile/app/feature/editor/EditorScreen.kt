@@ -3,6 +3,8 @@ package com.vvfile.app.feature.editor
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -369,48 +371,6 @@ internal fun EditorContent(
                 }
             }
         }
-        if (searchVisible) {
-            EditorSearchBar(
-                query = query,
-                onQueryChange = {
-                    query = it
-                    matchIndex = 0
-                },
-                replacement = replacement,
-                onReplacementChange = { replacement = it },
-                showReplace = showReplace,
-                onToggleReplace = { showReplace = !showReplace },
-                matchCase = matchCase,
-                onToggleMatchCase = { matchCase = !matchCase },
-                wholeWord = wholeWord,
-                onToggleWholeWord = { wholeWord = !wholeWord },
-                matchCount = matches.size,
-                matchIndex = matchIndex,
-                readOnly = state.editingBlocked,
-                onPrevious = { selectMatch(matchIndex - 1) },
-                onNext = { selectMatch(matchIndex + 1) },
-                onReplace = {
-                    if (matches.isNotEmpty()) {
-                        val start = matches[matchIndex.coerceIn(0, matches.lastIndex)]
-                        val updated = fieldValue.text.replaceRange(
-                            start,
-                            start + query.length,
-                            replacement,
-                        )
-                        applyEdit(updated, start + replacement.length)
-                    }
-                },
-                onReplaceAll = {
-                    if (query.isNotEmpty()) {
-                        val regex = buildSearchRegex(query, matchCase, wholeWord)
-                        val updated = regex.replace(fieldValue.text) { replacement }
-                        applyEdit(updated, 0)
-                    }
-                },
-                onClose = { searchVisible = false },
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-        }
         val previewKind = remember(state.path) { PreviewKind.of(state.path) }
         val darkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
         val showEditor = previewKind == PreviewKind.NONE || layout != PreviewLayout.PREVIEW_ONLY
@@ -457,6 +417,48 @@ internal fun EditorContent(
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
+        if (searchVisible) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            EditorSearchBar(
+                query = query,
+                onQueryChange = {
+                    query = it
+                    matchIndex = 0
+                },
+                replacement = replacement,
+                onReplacementChange = { replacement = it },
+                showReplace = showReplace,
+                onToggleReplace = { showReplace = !showReplace },
+                matchCase = matchCase,
+                onToggleMatchCase = { matchCase = !matchCase },
+                wholeWord = wholeWord,
+                onToggleWholeWord = { wholeWord = !wholeWord },
+                matchCount = matches.size,
+                matchIndex = matchIndex,
+                readOnly = state.editingBlocked,
+                onPrevious = { selectMatch(matchIndex - 1) },
+                onNext = { selectMatch(matchIndex + 1) },
+                onReplace = {
+                    if (matches.isNotEmpty()) {
+                        val start = matches[matchIndex.coerceIn(0, matches.lastIndex)]
+                        val updated = fieldValue.text.replaceRange(
+                            start,
+                            start + query.length,
+                            replacement,
+                        )
+                        applyEdit(updated, start + replacement.length)
+                    }
+                },
+                onReplaceAll = {
+                    if (query.isNotEmpty()) {
+                        val regex = buildSearchRegex(query, matchCase, wholeWord)
+                        val updated = regex.replace(fieldValue.text) { replacement }
+                        applyEdit(updated, 0)
+                    }
+                },
+                onClose = { searchVisible = false },
+            )
         }
         EditorStatusBar(state = state, fieldValue = fieldValue)
     }
@@ -517,92 +519,100 @@ private fun EditorSearchBar(
     onReplaceAll: () -> Unit,
     onClose: () -> Unit,
 ) {
+    // 对齐 MT：底部紧凑条 —— 第一行结果计数 + Cc/W，第二行查找框，第三行操作按钮
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            CompactField(
-                value = query,
-                onValueChange = onQueryChange,
-                placeholder = stringResource(R.string.editor_search_hint),
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(6.dp))
-            SearchToggle(label = "Cc", active = matchCase, onClick = onToggleMatchCase)
-            SearchToggle(label = "W", active = wholeWord, onClick = onToggleWholeWord)
             Text(
-                text = if (matchCount == 0) "0/0" else "${matchIndex + 1}/$matchCount",
+                text = "搜索结果: $matchCount" +
+                    if (matchCount > 0) "  ${matchIndex + 1}/$matchCount" else "",
                 fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp),
+                modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = onPrevious, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = Icons.Outlined.KeyboardArrowUp,
-                    contentDescription = stringResource(R.string.editor_search_previous),
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            IconButton(onClick = onNext, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = Icons.Outlined.KeyboardArrowDown,
-                    contentDescription = stringResource(R.string.editor_search_next),
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+            SearchToggle(label = "Cc", active = matchCase, onClick = onToggleMatchCase)
+            SearchToggle(label = "W", active = wholeWord, onClick = onToggleWholeWord)
+            IconButton(onClick = onClose, modifier = Modifier.size(30.dp)) {
                 Icon(
                     imageVector = Icons.Outlined.Close,
                     contentDescription = stringResource(R.string.editor_search_close),
-                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
+        CompactField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = stringResource(R.string.editor_search_hint),
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (showReplace) {
             Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CompactField(
-                    value = replacement,
-                    onValueChange = onReplacementChange,
-                    placeholder = stringResource(R.string.editor_replace_hint),
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onReplace, enabled = !readOnly && matchCount > 0) {
-                    Text(stringResource(R.string.editor_replace), fontSize = 12.sp)
-                }
-                TextButton(onClick = onReplaceAll, enabled = !readOnly && matchCount > 0) {
-                    Text(stringResource(R.string.editor_replace_all), fontSize = 12.sp)
-                }
-            }
+            CompactField(
+                value = replacement,
+                onValueChange = onReplacementChange,
+                placeholder = stringResource(R.string.editor_replace_hint),
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
-        Spacer(Modifier.height(2.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onToggleReplace) {
-                Text(if (showReplace) "收起替换" else "替换", fontSize = 12.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SearchAction("上一个", enabled = matchCount > 0, onClick = onPrevious)
+            SearchAction("下一个", enabled = matchCount > 0, onClick = onNext)
+            SearchAction(
+                label = if (showReplace) "替换" else "替换…",
+                enabled = true,
+                onClick = { if (showReplace) onReplace() else onToggleReplace() },
+            )
+            SearchAction(
+                label = "全部",
+                enabled = !readOnly && matchCount > 0,
+                onClick = onReplaceAll,
+            )
+            Spacer(Modifier.weight(1f))
+            if (showReplace) {
+                SearchAction("收起替换", enabled = true, onClick = onToggleReplace)
             }
         }
     }
 }
 
+/** MT 风格的纯文字操作按钮：无边框、小字号、主色。 */
 @Composable
-private fun SearchToggle(label: String, active: Boolean, onClick: () -> Unit) {
+private fun SearchAction(label: String, enabled: Boolean, onClick: () -> Unit) {
     Text(
         text = label,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
+        color = if (enabled) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+        },
+        modifier = Modifier
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    )
+}
+@Composable
+private fun SearchToggle(label: String, active: Boolean, onClick: () -> Unit) {
+    // MT 是纯文字开关：选中就主色加粗，不画底色
+    Text(
+        text = label,
+        fontSize = 12.sp,
         fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
         color = if (active) {
-            MaterialTheme.colorScheme.onPrimary
+            MaterialTheme.colorScheme.primary
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         },
         modifier = Modifier
-            .padding(horizontal = 2.dp)
-            .background(
-                if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background,
-            )
             .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 4.dp),
     )
@@ -615,6 +625,7 @@ private fun CompactField(
     placeholder: String,
     modifier: Modifier = Modifier,
 ) {
+    val underline = MaterialTheme.colorScheme.outline
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -625,8 +636,16 @@ private fun CompactField(
         ),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         modifier = modifier
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .drawBehind {
+                val y = size.height - 1.dp.toPx()
+                drawLine(
+                    color = underline,
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+            .padding(horizontal = 4.dp, vertical = 8.dp),
         decorationBox = { inner ->
             Box {
                 if (value.isEmpty() && placeholder.isNotEmpty()) {
