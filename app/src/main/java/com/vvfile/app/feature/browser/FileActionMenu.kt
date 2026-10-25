@@ -4,7 +4,6 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -192,39 +191,36 @@ private fun MenuCell(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    // 内容在每个格子内居中：两列都按各自的半宽居中，左右留白自然对称，
-    // 不会被「复制 / 删除」这种短标签拉成一边挤一边空。
-    Box(
+    // 左对齐：内容从格子左侧起排；右列多出的空白留着，居中反而让行对不齐、更乱。
+    Row(
         modifier = modifier
             .height(52.dp)
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp),
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = action.icon,
-                contentDescription = null,
-                tint = if (action.dangerous) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = action.label,
-                fontSize = 14.sp,
-                color = if (action.dangerous) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Icon(
+            imageVector = action.icon,
+            contentDescription = null,
+            tint = if (action.dangerous) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = action.label,
+            fontSize = 14.sp,
+            color = if (action.dangerous) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
