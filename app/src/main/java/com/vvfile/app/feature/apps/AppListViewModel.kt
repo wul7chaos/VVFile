@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.vvfile.app.core.path.WorkspaceLayout
 import com.vvfile.app.data.app.AppInfo
 import com.vvfile.app.data.app.AppRepository
 import kotlinx.coroutines.CancellationException
@@ -88,7 +89,7 @@ class AppListViewModel(
                     it.copy(
                         exportingPackage = null,
                         exportProgress = 0f,
-                        message = "已导出到 下载/${target.name}",
+                        message = "已导出到 ${WorkspaceLayout.ROOT_NAME}/${WorkspaceLayout.APK_DIR_NAME}/${target.name}",
                     )
                 }
             } catch (cancelled: CancellationException) {

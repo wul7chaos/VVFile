@@ -1,5 +1,6 @@
 package com.vvfile.app
 
+import android.content.Context
 import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
@@ -20,7 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.vvfile.app.core.format.MimeTypes
+import com.vvfile.app.core.path.WorkspaceLayout
 import com.vvfile.app.core.share.FileOpener
 import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.data.prefs.PrefsRepository
@@ -33,6 +36,13 @@ import com.vvfile.app.feature.settings.SettingsScreen
 import com.vvfile.app.feature.terminal.TerminalScreen
 import com.vvfile.app.ui.theme.AccentPresets
 import com.vvfile.app.ui.theme.VVFileTheme
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,11 +97,20 @@ class MainActivity : ComponentActivity() {
                                 "设置" -> showSettings = true
                                 "终端模拟器" -> showTerminal = true
                                 "已安装应用" -> showApps = true
-                                "文本编辑器" -> Toast.makeText(
-                                    this@MainActivity,
-                                    "从文件列表点击文本文件即可编辑",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
+                                "文本编辑器" -> lifecycleScope.launch {
+                                    val path = withContext(Dispatchers.IO) {
+                                        createScratchDocument(this@MainActivity)
+                                    }
+                                    if (path != null) {
+                                        editingPath = path
+                                    } else {
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "无法创建临时文件",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                }
                                 else -> Toast.makeText(
                                     this@MainActivity,
                                     "$tool · 后续里程碑接入",
@@ -134,5 +153,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * 侧栏「文本编辑器」：新建一个临时 txt 并直接进入编辑。
+     *
+     * 文件放在应用专属目录 `/storage/emulated/0/VVFile/temp/新建文本-时间戳.txt`，
+     * 与导出的 APK 一起集中在 VVFile 文件夹下，不污染「下载」等公共目录；
+     * 共享存储不可用时回退到应用缓存目录。
+     */
+    private fun createScratchDocument(context: Context): String? = runCatching {
+        val layout = WorkspaceLayout.default()
+        val dir = layout.ensure(layout.tempDir)
+            ?: layout.ensure(File(context.cacheDir, SCRATCH_DIR))
+            ?: return@runCatching null
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.CHINA).format(Date())
+        val file = File(dir, "新建文本-$stamp.txt")
+        if (!file.exists() && !file.createNewFile()) return@runCatching null
+        file.absolutePath
+    }.getOrNull()
+
+    private companion object {
+        private const val SCRATCH_DIR = "editor"
     }
 }

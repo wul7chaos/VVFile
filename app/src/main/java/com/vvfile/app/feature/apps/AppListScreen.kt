@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -22,19 +23,22 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -71,6 +75,7 @@ fun AppListScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var actionTarget by remember { mutableStateOf<AppInfo?>(null) }
 
     BackHandler(onBack = onClose)
 
@@ -122,13 +127,7 @@ fun AppListScreen(
                 state.visibleApps.isEmpty() -> EmptyState()
                 else -> LazyColumn(Modifier.fillMaxSize()) {
                     items(state.visibleApps, key = { it.packageName }) { app ->
-                        AppRow(
-                            app = app,
-                            onLaunch = { viewModel.launch(app) },
-                            onInfo = { viewModel.openAppInfo(app) },
-                            onExport = { viewModel.export(app) },
-                            onUninstall = { viewModel.requestUninstall(app) },
-                        )
+                        AppRow(app = app, onClick = { actionTarget = app })
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 64.dp),
                             color = MaterialTheme.colorScheme.outline,
@@ -137,6 +136,29 @@ fun AppListScreen(
                 }
             }
         }
+    }
+
+    actionTarget?.let { app ->
+        AppActionSheet(
+            app = app,
+            onDismiss = { actionTarget = null },
+            onLaunch = {
+                actionTarget = null
+                viewModel.launch(app)
+            },
+            onInfo = {
+                actionTarget = null
+                viewModel.openAppInfo(app)
+            },
+            onExport = {
+                actionTarget = null
+                viewModel.export(app)
+            },
+            onUninstall = {
+                actionTarget = null
+                viewModel.requestUninstall(app)
+            },
+        )
     }
 
     val exportingPackage = state.exportingPackage
@@ -233,45 +255,17 @@ private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
 @Composable
 private fun AppRow(
     app: AppInfo,
-    onLaunch: () -> Unit,
-    onInfo: () -> Unit,
-    onExport: () -> Unit,
-    onUninstall: () -> Unit,
+    onClick: () -> Unit,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(64.dp)
-            .clickable(onClick = onLaunch)
-            .padding(start = 12.dp, end = 4.dp),
+            .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val icon = app.icon
-        if (icon != null) {
-            androidx.compose.foundation.Image(
-                bitmap = icon.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RectangleShape),
-            )
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Android,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-        }
+        AppIcon(app)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -304,43 +298,138 @@ private fun AppRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Box {
-            IconButton(onClick = { menuOpen = true }) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreVert,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    }
+}
+
+/** 点击应用后展开的功能面板（替代行尾三点菜单）。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppActionSheet(
+    app: AppInfo,
+    onDismiss: () -> Unit,
+    onLaunch: () -> Unit,
+    onInfo: () -> Unit,
+    onExport: () -> Unit,
+    onUninstall: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RectangleShape,
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = null,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 8.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppIcon(app)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = app.label,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "${app.packageName} · ${app.versionText} · ${SizeFormatter.format(app.apkSizeBytes)}",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                MenuItem(stringResource(R.string.apps_launch)) {
-                    menuOpen = false
-                    onLaunch()
-                }
-                MenuItem(stringResource(R.string.apps_info)) {
-                    menuOpen = false
-                    onInfo()
-                }
-                MenuItem(stringResource(R.string.apps_export)) {
-                    menuOpen = false
-                    onExport()
-                }
-                MenuItem(stringResource(R.string.apps_uninstall), enabled = !app.isSystem) {
-                    menuOpen = false
-                    onUninstall()
-                }
-            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            SheetAction(Icons.Outlined.PlayArrow, stringResource(R.string.apps_launch), onLaunch)
+            SheetAction(Icons.Outlined.Info, stringResource(R.string.apps_info), onInfo)
+            SheetAction(Icons.Outlined.FileDownload, stringResource(R.string.apps_export), onExport)
+            SheetAction(
+                icon = Icons.Outlined.DeleteOutline,
+                label = stringResource(R.string.apps_uninstall),
+                onClick = onUninstall,
+                enabled = !app.isSystem,
+            )
         }
     }
 }
 
 @Composable
-private fun MenuItem(label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text(label, fontSize = 13.sp) },
-        enabled = enabled,
-        onClick = onClick,
-    )
+private fun SheetAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (enabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            },
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            color = if (enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            },
+        )
+    }
+}
+
+@Composable
+private fun AppIcon(app: AppInfo) {
+    val icon = app.icon
+    if (icon != null) {
+        androidx.compose.foundation.Image(
+            bitmap = icon.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RectangleShape),
+        )
+    } else {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Android,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
 }
 
 @Composable

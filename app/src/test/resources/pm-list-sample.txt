@@ -1,0 +1,8 @@
+package:/apex/com.android.mediaprovider/priv-app/MediaProvider@CP2A.260605.016/MediaProvider.apk=com.android.providers.media.module uid:10228
+package:/data/app/~~qu53UUJCO9v58Nuuu-_zlA==/com.xiaomi.type-8tXlPIPF5alCISsWm19ORw==/base.apk=com.xiaomi.type uid:10354
+package:/product/app/SogouIME/SogouIME.apk=com.sohu.inputmethod.sogou.xiaomi uid:10180
+package:/product/app/VoipServiceKit/VoipServiceKit.apk=com.os.callservice uid:10355
+package:/product/priv-app/MIUIContentExtension/MIUIContentExtension.apk=com.miui.contentextension uid:10124
+package:/product/priv-app/MIUIContactsT/MIUIContactsT.apk=com.android.contacts uid:10125
+package:/data/app/~~qu53UUJCO9v58Nuuu-_zlA==/com.xiaomi.type-8tXlPIPF5alCISsWm19ORw==/base.apk=com.xiaomi.type uid:10354
+package:/data/app/~~N6vdRJOAqmmSztQ6KIHmFQ==/com.xiaomi.mi_connect_service-lxprtbiOkPkc-ehOBrcv9A==/base.apk=com.xiaomi.mi_connect_service uid:1000

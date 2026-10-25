@@ -2,11 +2,17 @@ package com.vvfile.app.data.app
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Environment
+import android.os.Build
 import android.provider.Settings
 import androidx.core.graphics.drawable.toBitmap
+import com.vvfile.app.core.path.WorkspaceLayout
+import com.vvfile.app.core.shell.CommandRunner
+import com.vvfile.app.core.shell.RootAccess
+import com.vvfile.app.core.shell.ShellExecutor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -15,16 +21,68 @@ import java.util.Locale
 
 /**
  * 已安装应用数据源：PackageManager 查询、启动、应用信息、卸载、导出 APK。
+ *
+ * 列表来源分两条路：
+ * - 有 root：`su -c pm list packages -f -U` 枚举，能拿到 PackageManager 因可见性
+ *   限制看不到的包，再用 PackageManager 补齐名称 / 图标 / 版本（拿不到就退回包名）；
+ * - 无 root：走 PackageManager（依赖 `QUERY_ALL_PACKAGES` 才能看到全部包）。
+ *
  * 所有重 IO 操作都在 Dispatchers.IO 上执行；图标按包名缓存。
  */
-class AppRepository(private val context: Context) {
+class AppRepository(
+    private val context: Context,
+    private val runner: CommandRunner = ShellExecutor(),
+) {
 
     private val packageManager = context.packageManager
     private val iconCache = HashMap<String, Bitmap?>()
     private val collator = Collator.getInstance(Locale.CHINA)
 
-    @Suppress("DEPRECATION")
     suspend fun loadApps(): List<AppInfo> = withContext(Dispatchers.IO) {
+        val fromRoot = if (RootAccess.allowed()) {
+            runCatching { loadFromRoot() }.getOrNull().orEmpty()
+        } else {
+            emptyList()
+        }
+        val apps = if (fromRoot.isNotEmpty()) fromRoot else loadFromPackageManager()
+        apps.sortedWith { left, right -> collator.compare(left.label, right.label) }
+    }
+
+    /**
+     * root 通道：`pm list packages -f -U` 拿到全量包名与 APK 路径。
+     * 失败（无 su、授权被拒、超时）返回空列表，调用方回退到 PackageManager。
+     */
+    private suspend fun loadFromRoot(): List<AppInfo> {
+        val result = runner.exec(ROOT_LIST_COMMAND, asRoot = true, timeoutMs = ROOT_TIMEOUT_MS)
+        if (!result.isSuccess) return emptyList()
+        val entries = parsePackageListing(result.stdout)
+        if (entries.isEmpty()) return emptyList()
+        return entries.map { entry -> buildAppInfo(entry) }
+    }
+
+    /** 用 PackageManager 补齐 root 枚举到的包的展示信息；不可见时退回最小信息。 */
+    private fun buildAppInfo(entry: PackageEntry): AppInfo {
+        val info = runCatching { packageManager.getPackageInfo(entry.packageName, 0) }.getOrNull()
+        val application = info?.applicationInfo
+        val apkPath = application?.sourceDir?.takeIf { it.isNotBlank() } ?: entry.apkPath
+        val label = application?.let { app ->
+            runCatching { app.loadLabel(packageManager).toString() }.getOrNull()
+        }.takeUnless { it.isNullOrBlank() } ?: entry.packageName
+        return AppInfo(
+            packageName = entry.packageName,
+            label = label,
+            versionName = info?.versionName.orEmpty(),
+            versionCode = versionCodeOf(info),
+            isSystem = application?.let { isSystemApp(it) } ?: isSystemPath(apkPath),
+            apkSizeBytes = runCatching { File(apkPath).length() }.getOrDefault(0L),
+            lastUpdateTime = info?.lastUpdateTime ?: 0L,
+            icon = application?.let { loadIcon(entry.packageName, it) },
+            sourceDir = apkPath,
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun loadFromPackageManager(): List<AppInfo> =
         packageManager.getInstalledPackages(0).mapNotNull { info ->
             val application = info.applicationInfo ?: return@mapNotNull null
             val packageName = info.packageName
@@ -33,20 +91,32 @@ class AppRepository(private val context: Context) {
                 label = runCatching { application.loadLabel(packageManager).toString() }
                     .getOrDefault(packageName),
                 versionName = info.versionName.orEmpty(),
-                versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) {
-                    info.longVersionCode
-                } else {
-                    @Suppress("DEPRECATION")
-                    info.versionCode.toLong()
-                },
-                isSystem = (application.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
+                versionCode = versionCodeOf(info),
+                isSystem = isSystemApp(application),
                 apkSizeBytes = runCatching { File(application.sourceDir).length() }.getOrDefault(0L),
                 lastUpdateTime = info.lastUpdateTime,
                 icon = loadIcon(packageName, application),
                 sourceDir = application.sourceDir.orEmpty(),
             )
-        }.sortedWith { left, right -> collator.compare(left.label, right.label) }
+        }
+
+    private fun versionCodeOf(info: PackageInfo?): Long {
+        if (info == null) return 0L
+        return if (Build.VERSION.SDK_INT >= 28) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
     }
+
+    private fun isSystemApp(application: ApplicationInfo): Boolean =
+        (application.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
+            (application.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+
+    /** PM 查不到时，用 APK 路径推断是否系统应用。 */
+    private fun isSystemPath(apkPath: String): Boolean =
+        SYSTEM_PREFIXES.any { apkPath.startsWith(it) }
 
     private fun loadIcon(
         packageName: String,
@@ -84,8 +154,8 @@ class AppRepository(private val context: Context) {
     }
 
     /**
-     * 导出 APK 到系统下载目录，返回目标文件；文件名冲突时追加 (n)。
-     * [onProgress] 以 0..1 回调。
+     * 导出 APK 到应用专属目录 `/storage/emulated/0/VVFile/apk`（共享存储不可用时回退到
+     * 应用外部私有目录），文件名冲突时追加 (n)。[onProgress] 以 0..1 回调。
      */
     suspend fun exportApk(
         app: AppInfo,
@@ -93,8 +163,10 @@ class AppRepository(private val context: Context) {
     ): File = withContext(Dispatchers.IO) {
         val source = File(app.sourceDir)
         require(source.isFile) { "找不到 APK 文件" }
-        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        if (!dir.exists() && !dir.mkdirs()) error("无法创建下载目录")
+        val layout = WorkspaceLayout.default()
+        val dir = layout.ensure(layout.apkDir)
+            ?: context.getExternalFilesDir(WorkspaceLayout.APK_DIR_NAME)?.let { layout.ensure(it) }
+            ?: error("无法创建 ${WorkspaceLayout.ROOT_NAME}/${WorkspaceLayout.APK_DIR_NAME} 目录，请检查存储权限")
         val baseName = sanitize(app.label) + "-" + sanitize(app.versionName.ifBlank { app.versionCode.toString() })
         var target = File(dir, "$baseName.apk")
         var index = 1
@@ -125,5 +197,21 @@ class AppRepository(private val context: Context) {
         return trimmed.map { char ->
             if (char in "\\/:*?\"<>|") '_' else char
         }.joinToString("")
+    }
+
+    companion object {
+        private const val ROOT_LIST_COMMAND = "pm list packages -f -U --user 0"
+        private const val ROOT_TIMEOUT_MS = 20_000L
+        private val SYSTEM_PREFIXES = listOf(
+            "/system/",
+            "/system_ext/",
+            "/product/",
+            "/vendor/",
+            "/odm/",
+            "/oem/",
+            "/apex/",
+            "/my_product/",
+            "/my_heytap/",
+        )
     }
 }
