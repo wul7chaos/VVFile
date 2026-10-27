@@ -91,7 +91,3 @@ or offering paid services built on it). Full terms in [LICENSE.md](LICENSE.md).
 | [MT Manager](https://mt2.cn/) | Inspiration for the dual-pane workflow |
 | [dsh-pet](https://github.com/PC2005-cloud/dsh-pet) | The developer persona "Dafeiyu" — the picture above comes from that project |
 
-## Docs
-
-Design and acceptance docs are in Chinese under [`docs/`](docs/).
-
