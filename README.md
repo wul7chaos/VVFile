@@ -1,8 +1,10 @@
 # VVFile
 
+[English](README.en.md) · 中文
+
 Android 上的双窗格文件管理器，v1.0。
 
-![主界面](docs/shots/main-ui.png)
+![主界面](docs/images/main-ui.png)
 
 左边一个窗格看目录，右边一个窗格看文件；点哪个窗格，哪个窗格就是当前操作对象。
 
@@ -34,25 +36,9 @@ Android 上的双窗格文件管理器，v1.0。
 - 内置终端：真实 PTY + VT 仿真，支持粘滞修饰键与字号调节
 - 已安装应用列表：包名、版本、大小、数据目录，可一键跳到数据目录
 
-## 首次启动
-
-第一次装好打开，会先看到使用协议页，点「同意并继续」之后才进主界面；
-同意状态存在本地，之后启动直接进。卸载重装会重新出现。
-
-![使用协议](docs/shots/first-run-agreement.png)
-
-首次启动还需要授予「所有文件访问权限」，界面顶部会给出入口。命令行也可以：
-
-```powershell
-adb shell appops set com.vvfile.app MANAGE_EXTERNAL_STORAGE allow
-```
-
 ## 安装
 
 ```powershell
-# 已经装好的设备上升级
-vvlink install app\build\outputs\apk\release\app-release.apk
-# 或者
 adb install -r app\build\outputs\apk\release\app-release.apk
 ```
 
@@ -117,4 +103,3 @@ PC 工具链要顺手得多：屏幕大、脚本随便跑、生态齐全。手�
 | [07-路线图](docs/07-路线图.md) | 里程碑 |
 | [验收记录](docs/qa/2026-10-25-验收.md) | 每一轮改动的设备验证 |
 
-English: [README.en.md](README.en.md)

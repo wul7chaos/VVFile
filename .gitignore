@@ -33,3 +33,6 @@ design/icons/raw/
 design/icons/tmp_*.png
 design/appicon/raw/
 design/appicon/tmp*.png
+
+# ---- 本地截图（只在本地留证，不入库） ----
+docs/shots/

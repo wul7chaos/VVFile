@@ -64,7 +64,7 @@
 - 期望：关闭抽屉，停留在浏览器当前路径（docs/04 §7 抽屉为覆盖层，返回应先收敛覆盖层）
 - 实际：抽屉消失的同时 Activity 结束，回到桌面（`mCurrentFocus=app.lawnchair/...Launcher`）；再点桌面图标重新进入后浏览状态全部丢失（双窗格回到 `/0`、排序/隐藏文件设置复位）
 - 复现率：3/3
-- 截图：`docs/shots/qa-w1-30a-drawer-open.png`（返回前，抽屉展开）→ `qa-w1-30b-drawer-back-to-home.png`（返回后，桌面）
+- 截图：`docs/本地截图（返回前，抽屉展开）→ `qa-w1-30b-drawer-back-to-home.png`（返回后，桌面）
 - logcat：无 `FATAL EXCEPTION`/`ANR`，属正常 finish（ActivityTaskManager 无异常栈），因此**不是崩溃而是返回键分发缺失**
 - 定位线索（不改代码，仅供 ui-shell 参考）：`BrowserScreen.kt:136` 只注册了选择态的 `BackHandler(enabled = selectionActive && !drawerState.isOpen)`；非选择态下没有 `drawerState.isOpen` 的返回拦截，`ModalNavigationDrawer` 在本组合（material3 BOM 2025.09.00 + activity-compose 1.10.1）未吞掉该次返回，事件下传至 Activity 导致 finish。修法建议：补一个 `BackHandler(enabled = drawerState.isOpen) { scope.launch { drawerState.close() } }`（或在同一 handler 内按 `isOpen` 分支）。
 - 影响：W1 抽屉是主入口之一，误触返回即丢失浏览上下文；不阻断主流程，故定 P2。
@@ -99,40 +99,6 @@
 ### D6 [P3 · 环境] root 不可用导致系统分区用例只能验到错误态
 
 - `su` 二进制缺失（见 §6），抽屉显示「root 未检测」；`/data`、`/system` 均只能验证「无权限」分支，root 分支（§3.3 的浏览/复制/删除）无法在本次设备上执行
-
-## 4. 截图索引（`docs/shots/`）
-
-| 文件 | 内容 |
-| --- | --- |
-| `qa-w1-01-launch.png` | 冷启动双窗格，双 `/storage/emulated/0`，左窗格活动 |
-| `qa-w1-02-enter-dir.png` | 左窗格进入 `Android`，右窗格与计数不变 |
-| `qa-w1-03-up.png` / `04-back.png` / `05-forward.png` | 上级 / 后退 / 前进三态，按钮可用性正确 |
-| `qa-w1-06-breadcrumb.png` | 点面包屑 `storage` → `/storage`（同时体现无权限错误态） |
-| `qa-w1-07-sort-menu.png` | 排序菜单（名称✓/修改时间/大小/类型 + 升降序提示） |
-| `qa-w1-09-sort-size-desc.png` | 大小降序（46.2→40.8→31.7 KB…） |
-| `qa-w1-10-sort-time.png` | 修改时间升序（与 mtime 一致） |
-| `qa-w1-11-sort-type.png` | 类型排序（png 组 → xml 组） |
-| `qa-w1-12-overflow.png` | ⋮ 菜单（刷新/隐藏文件/单窗格/交换/关于） |
-| `qa-w1-13-hidden-on.png` | 隐藏文件开启：32→33，`.picker_transcoded` 出现 |
-| `qa-w1-17-pane-independent.png` | 右窗格独立导航，左窗格与面包屑不变（D3 证据） |
-| `qa-w1-18-refresh.png` | 刷新后 33→34，新建 `.qa-empty` 出现 |
-| `qa-w1-19-empty-dir.png` | 空目录空态 |
-| `qa-w1-20-selection.png` | 长按进入选择态（已选 1 项、勾选圆点、左色条） |
-| `qa-w1-22-select-all.png` | 全选（已选 34 项，34/34） |
-| `qa-w1-23-copy-toast.png` | 底部「复制」Toast（M2 实现占位） |
-| `qa-w1-24-back-exit-selection.png` | 返回键退出选择态，界面复原 |
-| `qa-w1-25-single-pane.png` | 单窗格：右窗格隐藏、右 tab 置灰 |
-| `qa-w1-27-dual-restored.png` | 关闭单窗格恢复双窗格 |
-| `qa-w1-28-drawer.png` | 抽屉：品牌 / root 状态 / 存储卡片 / 工具入口 |
-| `qa-w1-29-root-list.png` | 根目录 `/`（37 项，符号链接标记，上级置灰） |
-| `qa-w1-30a-drawer-open.png` | D1 返回前：抽屉展开 |
-| `qa-w1-30b-drawer-back-to-home.png` | D1 返回后：退回桌面 |
-| `qa-w1-31-root-list.png` | 再次进入根目录（D1 复现后状态） |
-| `qa-w1-33-data-error.png` | `/data` 无权限错误态 |
-| `qa-w1-34-stability.png` | 2 分钟连续操作后界面正常 |
-| `qa-w1-35-deselect.png` | 取消勾选（2 项 → 1 项，`1/32`） |
-
-必备六类截图均已覆盖：双窗格（01）、选择态（20/22）、单窗格（25）、排序菜单（07）、抽屉（28）、错误/空态（19/33）。
 
 ## 5. 未覆盖 / 顺延
 

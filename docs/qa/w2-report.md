@@ -104,38 +104,6 @@
 - 解压含非法路径的包时，同包内合法条目也不会解出（fail-closed），符合安全预期。
 - W1 报告的 D2（深层路径面包屑首段 `/` 丢失）在 W2 已修复：现在始终可见根 `/`（`qa-w2-01-launch.png`）。
 
-## 4. 截图索引（`docs/shots/`，44 张）
-
-| 文件 | 内容 |
-| --- | --- |
-| `qa-w2-01-launch.png` | 冷启动；W2 新面包屑（含根 `/`、计数胶囊） |
-| `qa-w2-04-qa-w2-right-active.png` | 右窗格激活，双窗格不同路径 |
-| `qa-w2-07/08` | 左 src、右 dst 就绪 |
-| `qa-w2-09-selection.png` | 选择 a.txt（已选 1 项） |
-| `qa-w2-10-conflict.png` | 冲突对话框（取消/覆盖/跳过/重命名） |
-| `qa-w2-11-conflict-cancel.png` | 分支·取消（目标未变） |
-| `qa-w2-13-replace-done.png` | 分支·覆盖 + 完成 Toast + 目标窗格刷新 |
-| `qa-w2-14-skip.png` | 分支·跳过（成功 0 项，跳过 1 项） |
-| `qa-w2-15-*` | 分支·重命名（`a (1).txt`，见下方 ls 记录）——截图内容为完成后的列表 |
-| `qa-w2-16/17` | 移动选择态 / 移动完成 |
-| `qa-w2-18/19/20` | 大文件准备与进度（68%） |
-| `qa-w2-21-cancelled.png` | 取消后「已取消操作」，无残留 |
-| `qa-w2-22/23` | 删除确认 / 删除完成 |
-| `qa-w2-24-more-sheet.png` | 更多菜单（重命名/压缩/解压置灰/分享） |
-| `qa-w2-25/26/27/28` | 重命名对话框 / 非法字符 / 校验文案 / 改名成功 |
-| `qa-w2-33/34/35/36` | 新建菜单 / 新建文件夹对话框 / 非法名校验 / 创建成功 |
-| `qa-w2-37/38` | 新建文件对话框 / 创建成功 |
-| `qa-w2-39/40` | 压缩为 ZIP 对话框 / 完成 |
-| `qa-w2-41/42/43` | 中文名列表 / 中文压缩对话框 / 压缩完成 |
-| `qa-w2-44-unzip-conflict.png` | 解压完成（同名已存在） |
-| `qa-w2-45-unzip-overwrite.png` | D2：解压静默覆盖 |
-| `qa-w2-47-zipslip.png` | Zip-Slip 拒绝（D3 英文文案） |
-| `qa-w2-48-editor-utf8.png` | 编辑器打开 UTF-8 文件 |
-| `qa-w2-50-editor-saved.png` | 编辑后保存（已保存） |
-| `qa-w2-51-unsaved-confirm.png` | 未保存确认对话框 |
-| `qa-w2-52/55` | 放弃修改前后的状态 |
-| `qa-w2-56/57` | D1：点 gbk.txt 显示 aa.txt 会话 |
-
 ## 5. 未覆盖 / 顺延
 
 1. **分享入口**：选择文件 → 更多 → 分享 → chooser / content URI 校验未执行（时间原因），建议下一轮补测，注意 FileProvider authority 与 `FLAG_GRANT_READ_URI_PERMISSION`。

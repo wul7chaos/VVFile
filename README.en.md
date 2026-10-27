@@ -1,8 +1,10 @@
 # VVFile
 
+[中文](README.md) · English
+
 A dual-pane file manager for Android. v1.0.
 
-![Main screen](docs/shots/main-ui.png)
+![Main screen](docs/images/main-ui.png)
 
 One pane for folders, one for files. The pane you touch becomes the active pane.
 
@@ -34,25 +36,9 @@ One pane for folders, one for files. The pane you touch becomes the active pane.
 - Built-in terminal: real PTY with VT emulation, sticky modifier keys, adjustable font size
 - Installed apps list: package, version, size, data directory, one tap to browse it
 
-## First launch
-
-A usage agreement is shown on first run. Tap **Agree and continue** to enter the app;
-the choice is stored locally and later launches go straight to the file list.
-Reinstalling brings it back.
-
-![Usage agreement](docs/shots/first-run-agreement.png)
-
-"All files access" is required for browsing shared storage; the app shows a banner with a shortcut.
-
-```powershell
-adb shell appops set com.vvfile.app MANAGE_EXTERNAL_STORAGE allow
-```
-
 ## Install
 
 ```powershell
-vvlink install app\build\outputs\apk\release\app-release.apk
-# or
 adb install -r app\build\outputs\apk\release\app-release.apk
 ```
 
@@ -111,4 +97,3 @@ or offering paid services built on it). Full terms in [LICENSE.md](LICENSE.md).
 
 Design and acceptance docs are in Chinese under [`docs/`](docs/).
 
-中文说明：[README.md](README.md)
