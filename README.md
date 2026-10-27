@@ -68,21 +68,6 @@ adb install -r app\build\outputs\apk\release\app-release.apk
 .\gradlew.bat :app:testDebugUnitTest
 ```
 
-### 发版
-
-版本号由 tag 决定，`.github/workflows/release.yml` 会自动跑单测、打签名包、
-建 Release 并把 APK 挂上去：
-
-```powershell
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-`versionName` 取 tag 去掉 `v`（`1.0.1`），`versionCode` 由 semver 折算
-（`1.0.1` → `10001`）。签名密钥放在仓库 Secrets 里
-（`VVFILE_KEYSTORE_BASE64` / `VVFILE_KEYSTORE_PASSWORD` / `VVFILE_KEY_ALIAS` /
-`VVFILE_KEY_PASSWORD`），本地构建则读根目录的 `keystore.properties`（已 gitignore）。
-
 ## 关于逆向
 
 手机端做的是文件管理。APK 反编译、脱壳、改包这类活，现在 AI 辅助下的
