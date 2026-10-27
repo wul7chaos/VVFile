@@ -64,7 +64,8 @@ import kotlin.math.abs
 /**
  * 单个窗格：列表 + 加载/空/错误态。
  *
- * 列表滚动位置由调用方持有（每窗格一份 LazyListState），路径变化时由调用方回到顶部。
+ * 列表滚动位置由调用方持有（每窗格一份 LazyListState），换目录时由调用方按
+ * [ScrollMemory] 恢复上次的落点，没访问过的目录才回到顶部。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
