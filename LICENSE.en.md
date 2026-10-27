@@ -1,6 +1,6 @@
 # VVFile Non-Commercial License
 
-Copyright (c) 2026 大肥鱼 (Dafeiyu), model `DeepSeek-v4.1-flash-1017`
+Copyright (c) 2026 大肥鱼 (Dafeiyu), model `DeepSeek-v4.1-flash-1017` & VVLing
 
 ## 1. Grant
 

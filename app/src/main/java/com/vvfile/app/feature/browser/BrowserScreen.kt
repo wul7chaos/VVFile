@@ -1306,7 +1306,7 @@ private fun AboutDialog(onDismiss: () -> Unit) {
                     "专注本地文件管理：双窗格浏览、批量选择、复制/移动/删除/重命名、\n" +
                     "压缩与解压、root 系统分区读写、终端模拟器、文本编辑器。\n" +
                     "root 能力来自设备上的 su。\n\n" +
-                    "开发者：大肥鱼（DeepSeek-v4.1-flash-1017）",
+                    "开发者：大肥鱼（DeepSeek-v4.1-flash-1017）& VVLing",
             )
         },
         confirmButton = {

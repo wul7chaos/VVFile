@@ -1,6 +1,6 @@
 # VVFile 非商业开源许可协议
 
-版权所有 (c) 2026 大肥鱼（DeepSeek-v4.1-flash-1017）
+版权所有 (c) 2026 大肥鱼（DeepSeek-v4.1-flash-1017）& VVLing
 
 ## 一、许可授予
 
