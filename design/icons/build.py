@@ -12,6 +12,8 @@ import sys
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
+from white_label import lighten
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(HERE, "raw")
 RES = os.path.abspath(os.path.join(HERE, "..", "..", "app", "src", "main", "res", "drawable-nodpi"))
@@ -41,6 +43,10 @@ def outline(im, r=STROKE):
 
 
 def normalize(im):
+    return lighten(_normalize_art(im))
+
+
+def _normalize_art(im):
     im = outline(clean(im))
     box = im.getbbox()
     if not box:
@@ -76,7 +82,36 @@ def pick(name):
     return (files[i] if i is not None else files[-1]), i
 
 
+def glob_raster():
+    """res/drawable-nodpi 下已生成的 vvfile_ic_*.png。"""
+    import glob
+    return sorted(glob.glob(os.path.join(RES, "vvfile_ic_*.png")))
+
+
+def sheet(names):
+    """对照表：上排 96px，下排真实 24dp；深色/浅色底各一行。"""
+    cols = len(names)
+    cw, ch = 150, 200
+    img = Image.new("RGBA", (cols * cw, ch * 2), (0, 0, 0, 0))
+    for i, name in enumerate(names):
+        ic = Image.open(os.path.join(RES, "vvfile_ic_%s.png" % name))
+        for row, bg in ((0, (15, 18, 24, 255)), (1, (247, 248, 250, 255))):
+            tile = Image.new("RGBA", (cw, ch), bg)
+            tile.alpha_composite(ic.resize((92, 92), Image.LANCZOS), ((cw - 92) // 2, 16))
+            tile.alpha_composite(ic.resize((24, 24), Image.LANCZOS), ((cw - 24) // 2, 140))
+            img.alpha_composite(tile, (i * cw, row * ch))
+    img.save(PREVIEW)
+    print("preview ->", PREVIEW)
+
+
 def main():
+    # --sheet：只按现有 res 图标重出一张对照表，不动图标本身
+    if "--sheet" in sys.argv[1:]:
+        names = sorted(os.path.basename(p)[len("vvfile_ic_"):-4]
+                       for p in glob_raster())
+        sheet(names)
+        return
+
     names = sorted(os.listdir(RAW)) if os.path.isdir(RAW) else []
     only = sys.argv[1:]
     if only:
@@ -91,20 +126,8 @@ def main():
     for name, fn, size in made:
         print("%-8s <- %-22s %5d B" % (name, fn, size))
 
-    # 对照表：上排 96px，下排真实 24dp；深色/浅色底各一行
     if made:
-        cols = len(made)
-        cw, ch = 150, 200
-        sheet = Image.new("RGBA", (cols * cw, ch * 2), (0, 0, 0, 0))
-        for i, (name, _, _) in enumerate(made):
-            ic = Image.open(os.path.join(RES, "vvfile_ic_%s.png" % name))
-            for row, bg in ((0, (15, 18, 24, 255)), (1, (247, 248, 250, 255))):
-                tile = Image.new("RGBA", (cw, ch), bg)
-                tile.alpha_composite(ic.resize((92, 92), Image.LANCZOS), ((cw - 92) // 2, 16))
-                tile.alpha_composite(ic.resize((24, 24), Image.LANCZOS), ((cw - 24) // 2, 140))
-                sheet.alpha_composite(tile, (i * cw, row * ch))
-        sheet.save(PREVIEW)
-        print("preview ->", PREVIEW)
+        sheet([name for name, _, _ in made])
 
 
 if __name__ == "__main__":

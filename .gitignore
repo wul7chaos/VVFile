@@ -23,6 +23,8 @@ desktop.ini
 # ---- 日志与临时 ----
 *.log
 *.hprof
+__pycache__/
+*.pyc
 docs/shots/*.tmp
 
 # ---- 外部参考仓库（只用于研究，不参与构建） ----
