@@ -11,6 +11,9 @@ datastore = "1.1.7"
 coroutines = "1.10.2"
 commonmark = "0.24.0"
 media3 = "1.11.1"
+commonsCompress = "1.28.0"
+xz = "1.10"
+commonsIo = "2.20.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -34,6 +37,9 @@ androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplaye
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 # 单测里 android.jar 的 org.json 是空壳，换成真实现（只在 test 配置生效）
+commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
+commons-io = { group = "commons-io", name = "commons-io", version.ref = "commonsIo" }
+xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }
 json = { group = "org.json", name = "json", version = "20240303" }
 
 [plugins]

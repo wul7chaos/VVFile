@@ -60,6 +60,8 @@ data class BrowserUiState(
     val operation: OperationUiState? = null,
     /** 复制/移动检测到同名目标时的处理提示。 */
     val conflictPrompt: ConflictPrompt? = null,
+    /** 解压加密压缩包时等待密码。 */
+    val zipPasswordPrompt: ZipPasswordPrompt? = null,
     /** 一次性提示（操作摘要/校验失败），UI 展示后调用 consumeMessage()。 */
     val message: UiMessage? = null,
 )
@@ -79,6 +81,18 @@ data class OperationUiState(
 data class ConflictPrompt(
     val kind: OperationKind,
     val count: Int,
+)
+
+/**
+ * 解压加密压缩包时的密码请求。
+ *
+ * [wrong] 为 true 表示上一次输入没解开：弹窗留在原地并显示「密码不正确」，
+ * 不让用户从头再点一遍解压。
+ */
+data class ZipPasswordPrompt(
+    val zipPath: String,
+    val targetDir: String,
+    val wrong: Boolean = false,
 )
 
 /** 操作结束后交给 UI 的一次性反馈。Simple 用于校验/提示类文案。 */

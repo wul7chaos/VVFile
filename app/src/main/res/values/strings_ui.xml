@@ -85,9 +85,8 @@
     <string name="ui_ops_same_dir">源目录与目标目录相同</string>
     <string name="ui_ops_into_self">不能复制或移动到自身或其子目录</string>
     <string name="ui_ops_target_invalid">当前文件夹路径不可用</string>
-    <string name="ui_ops_unzip_requires_zip">请选择单个 .zip 文件</string>
+    <string name="ui_ops_unzip_requires_zip">请选择单个 .zip 或 .7z 文件</string>
     <string name="ui_ops_unzip_probe_failed">无法读取压缩包</string>
-    <string name="ui_ops_zip_encrypted">压缩包已加密，暂不支持输入密码</string>
     <string name="ui_ops_zip_slip_rejected">压缩包包含非法路径，已拒绝解压</string>
     <string name="ui_ops_name_invalid">文件名不合法</string>
     <string name="ui_ops_zip_exists">同名压缩包已存在</string>

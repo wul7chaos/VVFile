@@ -144,4 +144,59 @@ class ArchiveIndexTest {
         runCatching { ArchiveIndex.read(broken.absolutePath) }.onFailure { failed = true }
         assertTrue(failed)
     }
+
+    // ------------------------------------------------------------ 7z 与加密包 --
+
+    private fun fixture(name: String): File {
+        val stream = javaClass.getResourceAsStream("/archives/$name") ?: error("缺少测试样本 $name")
+        val target = temp.newFile(name)
+        stream.use { input -> target.outputStream().use { input.copyTo(it) } }
+        return target
+    }
+
+    @Test
+    fun `7z 包能像 zip 一样逐层浏览`() {
+        val path = fixture("plain.7z").absolutePath
+        val entries = ArchiveIndex.read(path)
+        assertEquals(listOf("docs/", "a.txt"), ArchiveIndex.children(entries, "").map { it.name })
+        assertEquals(listOf("docs/b.txt"), ArchiveIndex.children(entries, "docs").map { it.name })
+    }
+
+    @Test
+    fun `加密文件头的 7z 不给密码读不出列表`() {
+        val path = fixture("encrypted.7z").absolutePath
+        var required = false
+        runCatching { ArchiveIndex.read(path) }
+            .onFailure { required = it is com.vvfile.app.core.archive.ArchivePasswordRequiredException }
+        assertTrue(required)
+    }
+
+    @Test
+    fun `加密文件头的 7z 给密码后能列出并解出`() {
+        val path = fixture("encrypted.7z").absolutePath
+        val entries = ArchiveIndex.read(path, "123456")
+        assertTrue(entries.any { it.name == "a.txt" })
+
+        val out = temp.newFolder("seven-out")
+        val extracted = ArchiveIndex.extractTo(path, "a.txt", out, "123456")
+        assertNotNull(extracted)
+        assertEquals("hello from VVFile", extracted!!.readText())
+    }
+
+    @Test
+    fun `加密 zip 的加密标记与解密解压`() {
+        val path = fixture("zipcrypto.zip").absolutePath
+        val entries = ArchiveIndex.read(path)
+        assertTrue(entries.all { it.encrypted })
+
+        val out = temp.newFolder("zip-out")
+        var wrong = false
+        runCatching { ArchiveIndex.extractTo(path, "a.txt", out, "wrong") }
+            .onFailure { wrong = it is com.vvfile.app.core.archive.ArchivePasswordWrongException }
+        assertTrue(wrong)
+
+        val extracted = ArchiveIndex.extractTo(path, "a.txt", out, "123456")
+        assertNotNull(extracted)
+        assertEquals("hello from VVFile", extracted!!.readText())
+    }
 }

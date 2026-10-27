@@ -95,6 +95,17 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.commonmark)
+    // 7z：容器解析 + LZMA/LZMA2/BCJ + AES-256 解码（xz 提供 LZMA 实现）
+    implementation(libs.commons.compress) {
+        // 只用 7z 通道，把用不到的可选编解码器摘掉：
+        // zstd-jni 自带几十 MB 各平台原生库，塞进 APK 纯属浪费
+        exclude(group = "com.github.luben", module = "zstd-jni")
+        exclude(group = "org.brotli", module = "dec")
+        exclude(group = "org.ow2.asm", module = "asm")
+        exclude(group = "commons-codec", module = "commons-codec")
+    }
+    implementation(libs.commons.io)
+    implementation(libs.xz)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.ui)

@@ -60,11 +60,12 @@ class FallbackFileOperator(
         zipPath: String,
         targetDir: String,
         policy: ConflictPolicy,
+        password: String?,
     ): Flow<OperationEvent> =
         if (useRoot(zipPath, targetDir)) {
-            root.unzip(zipPath, targetDir, policy)
+            root.unzip(zipPath, targetDir, policy, password)
         } else {
-            local.unzip(zipPath, targetDir, policy)
+            local.unzip(zipPath, targetDir, policy, password)
         }
 
     override suspend fun rename(path: String, newName: String): OperationResult =
@@ -92,5 +93,6 @@ class FallbackFileOperator(
     override suspend fun findZipConflicts(
         zipPath: String,
         targetDir: String,
-    ): List<ConflictInfo> = local.findZipConflicts(zipPath, targetDir)
+        password: String?,
+    ): List<ConflictInfo> = local.findZipConflicts(zipPath, targetDir, password)
 }

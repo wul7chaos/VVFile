@@ -111,6 +111,7 @@ import com.vvfile.app.R
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.data.model.FileEntry
+import com.vvfile.app.feature.archive.ArchivePasswordDialog
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
 import com.vvfile.app.core.script.ScriptEnv
@@ -395,6 +396,24 @@ fun BrowserScreen(
                 onRefresh = { viewModel.refresh(state.active) },
             )
 
+            /**
+             * 单击文件：脚本先问怎么执行；**没有已知打开方式的文件直接弹「打开方式」面板**
+             * （以前是默默交给系统，可能什么都不发生）；其余交给外层按扩展名路由。
+             */
+            val openEntry: (PaneId, FileEntry) -> Unit = { paneId, entry ->
+                viewModel.setActive(paneId)
+                when {
+                    entry.isScript -> openScript(entry)
+                    FileOpening.needsChooser(entry.path) -> openWithTarget = entry
+                    onOpenFile != null -> onOpenFile(entry.path)
+                    else -> Toast.makeText(
+                        context,
+                        "打开 ${entry.name}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 PaneContent(
                     pane = state.left,
@@ -406,16 +425,7 @@ fun BrowserScreen(
                         viewModel.setActive(PaneId.LEFT)
                         viewModel.navigate(PaneId.LEFT, path)
                     },
-                    onOpenFile = { entry ->
-                        viewModel.setActive(PaneId.LEFT)
-                        if (entry.isScript) {
-                            openScript(entry)
-                        } else if (onOpenFile != null) {
-                            onOpenFile(entry.path)
-                        } else {
-                            Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
-                        }
-                    },
+                    onOpenFile = { entry -> openEntry(PaneId.LEFT, entry) },
                     onLongPress = { entry -> openActionMenu(PaneId.LEFT, entry) },
                     onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.LEFT, entry.path) },
                     onRetry = { viewModel.refresh(PaneId.LEFT) },
@@ -443,16 +453,7 @@ fun BrowserScreen(
                             viewModel.setActive(PaneId.RIGHT)
                             viewModel.navigate(PaneId.RIGHT, path)
                         },
-                        onOpenFile = { entry ->
-                            viewModel.setActive(PaneId.RIGHT)
-                            if (entry.isScript) {
-                                openScript(entry)
-                            } else if (onOpenFile != null) {
-                                onOpenFile(entry.path)
-                            } else {
-                                Toast.makeText(context, "打开 ${entry.name}", Toast.LENGTH_SHORT).show()
-                            }
-                        },
+                        onOpenFile = { entry -> openEntry(PaneId.RIGHT, entry) },
                         onLongPress = { entry -> openActionMenu(PaneId.RIGHT, entry) },
                         onToggleSelect = { entry -> viewModel.toggleSelect(PaneId.RIGHT, entry.path) },
                         onRetry = { viewModel.refresh(PaneId.RIGHT) },
@@ -756,6 +757,16 @@ fun BrowserScreen(
 
     state.conflictPrompt?.let { prompt ->
         ConflictDialog(prompt = prompt, onResolve = viewModel::resolveConflict)
+    }
+
+    state.zipPasswordPrompt?.let { prompt ->
+        ArchivePasswordDialog(
+            fileName = prompt.zipPath.substringAfterLast('/'),
+            error = if (prompt.wrong) "密码不正确" else null,
+            hint = "这个压缩包需要密码才能解压",
+            onDismiss = viewModel::dismissZipPassword,
+            onConfirm = viewModel::submitZipPassword,
+        )
     }
 
     if (showDeleteConfirm) {

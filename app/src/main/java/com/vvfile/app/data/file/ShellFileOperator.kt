@@ -79,6 +79,7 @@ class ShellFileOperator(
         zipPath: String,
         targetDir: String,
         policy: ConflictPolicy,
+        password: String?,
     ): Flow<OperationEvent> = unsupportedFlow(zipPath, "root 分区暂不支持解压")
 
     override suspend fun rename(path: String, newName: String): OperationResult =
@@ -144,6 +145,7 @@ class ShellFileOperator(
     override suspend fun findZipConflicts(
         zipPath: String,
         targetDir: String,
+        password: String?,
     ): List<ConflictInfo> = emptyList()
 
     // ---------------------------------------------------------------- internals --

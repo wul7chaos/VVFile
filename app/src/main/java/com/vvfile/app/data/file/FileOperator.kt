@@ -31,10 +31,15 @@ interface FileOperator {
         level: Int = java.util.zip.Deflater.DEFAULT_COMPRESSION,
     ): Flow<OperationEvent>
 
+    /**
+     * 解压 ZIP / 7z 到目录。[password] 只对加密包有意义；
+     * 密码错会以失败项的形式返回「密码不正确」，不会静默产出半截文件。
+     */
     fun unzip(
         zipPath: String,
         targetDir: String,
         policy: ConflictPolicy = ConflictPolicy.REPLACE,
+        password: String? = null,
     ): Flow<OperationEvent>
 
     suspend fun rename(path: String, newName: String): OperationResult
@@ -49,6 +54,10 @@ interface FileOperator {
     /** 列出会在目标目录发生冲突的源；UI 据此弹出覆盖/跳过/重命名选择。 */
     suspend fun findConflicts(sources: List<String>, targetDir: String): List<ConflictInfo>
 
-    /** 解压前探测 zip 内条目与目标目录的同名冲突。 */
-    suspend fun findZipConflicts(zipPath: String, targetDir: String): List<ConflictInfo>
+    /** 解压前探测 zip / 7z 内条目与目标目录的同名冲突。 */
+    suspend fun findZipConflicts(
+        zipPath: String,
+        targetDir: String,
+        password: String? = null,
+    ): List<ConflictInfo>
 }

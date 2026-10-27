@@ -6,7 +6,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vvfile.app.R
 import com.vvfile.app.ServiceLocator
-import com.vvfile.app.core.archive.ZipCentralDirectory
+import com.vvfile.app.feature.archive.ArchiveEncryption
+import com.vvfile.app.feature.archive.ArchiveFormats
+import com.vvfile.app.feature.archive.ArchivePasswords
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.core.result.OperationEvent
@@ -410,37 +412,68 @@ class BrowserViewModel : ViewModel() {
     fun unzipSelection(targetDir: String? = null) {
         if (isBusy()) return notifyBusy()
         val pane = activePaneState()
-        val zip = selectedEntries(pane).singleOrNull()
-            ?.takeIf { !it.isDirectory && it.extension == "zip" }
+        val archive = selectedEntries(pane).singleOrNull()
+            ?.takeIf { !it.isDirectory && ArchiveFormats.canExtract(it.path) }
             ?: return postMessage(UiMessage.Simple(R.string.ui_ops_unzip_requires_zip))
         val target = targetDir?.trim()?.takeIf { it.isNotEmpty() } ?: pane.path
         if (target.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
         viewModelScope.launch {
-            // 带密码的包在 Android 14+ 连 ZipFile 都打不开，冲突探测只会抛异常；
-            // 先按中央目录点名，给一句能看懂的提示
+            // 加密包先要密码：ZIP 看中央目录标志位，7z 连数据也要真读一下才知道
             val encrypted = withContext(Dispatchers.IO) {
-                runCatching { ZipCentralDirectory.hasEncryptedEntry(File(zip.path)) }.getOrDefault(false)
+                runCatching { ArchiveEncryption.needsPassword(archive.path) }.getOrDefault(false)
             }
-            if (encrypted) {
-                return@launch postMessage(UiMessage.Simple(R.string.ui_ops_zip_encrypted))
+            val cached = ArchivePasswords.get(archive.path)
+            if (encrypted && cached == null) {
+                _state.update { it.copy(zipPasswordPrompt = ZipPasswordPrompt(archive.path, target)) }
+                return@launch
             }
-            try {
-                val conflicts = operator.findZipConflicts(zip.path, target)
-                if (conflicts.isEmpty()) {
-                    startFlow(OperationKind.UNZIP) { operator.unzip(zip.path, target) }
-                } else {
-                    pendingUnzip = PendingUnzip(zip.path, target)
-                    _state.update {
-                        it.copy(conflictPrompt = ConflictPrompt(OperationKind.UNZIP, conflicts.size))
-                    }
+            proceedUnzip(archive.path, target, cached)
+        }
+    }
+
+    /** 密码框确认：先验一条，密码错就留在框上重来。 */
+    fun submitZipPassword(password: String) {
+        val prompt = _state.value.zipPasswordPrompt ?: return
+        _state.update { it.copy(zipPasswordPrompt = null) }
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { ArchiveEncryption.verify(prompt.zipPath, password) }.getOrDefault(false)
+            }
+            if (!ok) {
+                _state.update {
+                    it.copy(zipPasswordPrompt = prompt.copy(wrong = true))
                 }
-            } catch (error: Exception) {
-                if (isZipSlip(error)) {
-                    postMessage(UiMessage.Simple(R.string.ui_ops_zip_slip_rejected))
-                } else {
-                    Log.e("VVFileUnzip", "probe failed", error)
-                    postMessage(UiMessage.Simple(R.string.ui_ops_unzip_probe_failed))
+                return@launch
+            }
+            ArchivePasswords.remember(prompt.zipPath, password)
+            proceedUnzip(prompt.zipPath, prompt.targetDir, password)
+        }
+    }
+
+    fun dismissZipPassword() {
+        _state.update { it.copy(zipPasswordPrompt = null) }
+    }
+
+    /** 冲突探测 + 起解压流程；[password] 一路带到 operator，加密条目靠它落地。 */
+    private suspend fun proceedUnzip(zipPath: String, target: String, password: String?) {
+        try {
+            val conflicts = operator.findZipConflicts(zipPath, target, password)
+            if (conflicts.isEmpty()) {
+                startFlow(OperationKind.UNZIP) {
+                    operator.unzip(zipPath, target, ConflictPolicy.REPLACE, password)
                 }
+            } else {
+                pendingUnzip = PendingUnzip(zipPath, target, password)
+                _state.update {
+                    it.copy(conflictPrompt = ConflictPrompt(OperationKind.UNZIP, conflicts.size))
+                }
+            }
+        } catch (error: Exception) {
+            if (isZipSlip(error)) {
+                postMessage(UiMessage.Simple(R.string.ui_ops_zip_slip_rejected))
+            } else {
+                Log.e("VVFileUnzip", "probe failed", error)
+                postMessage(UiMessage.Simple(R.string.ui_ops_unzip_probe_failed))
             }
         }
     }
@@ -453,7 +486,7 @@ class BrowserViewModel : ViewModel() {
             _state.update { it.copy(conflictPrompt = null) }
             if (policy == null) return
             startFlow(OperationKind.UNZIP) {
-                operator.unzip(pendingZip.zipPath, pendingZip.targetDir, policy)
+                operator.unzip(pendingZip.zipPath, pendingZip.targetDir, policy, pendingZip.password)
             }
             return
         }
@@ -720,6 +753,7 @@ class BrowserViewModel : ViewModel() {
     private data class PendingUnzip(
         val zipPath: String,
         val targetDir: String,
+        val password: String? = null,
     )
 
     /** 文件打开在 M2 接入；此处只暴露判断给 UI。 */

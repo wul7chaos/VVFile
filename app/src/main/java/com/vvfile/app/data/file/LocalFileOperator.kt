@@ -1,6 +1,9 @@
 package com.vvfile.app.data.file
 
+import com.vvfile.app.core.archive.ArchivePasswordException
+import com.vvfile.app.core.archive.SevenZipArchive
 import com.vvfile.app.core.archive.ZipCentralDirectory
+import com.vvfile.app.core.archive.ZipEntryReader
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictInfo
 import com.vvfile.app.core.result.ConflictPolicy
@@ -79,8 +82,9 @@ class LocalFileOperator(
         zipPath: String,
         targetDir: String,
         policy: ConflictPolicy,
+        password: String?,
     ): Flow<OperationEvent> = flow {
-        val result = runUnzip(zipPath, targetDir, policy) { emit(OperationEvent.Progress(it)) }
+        val result = runUnzip(zipPath, targetDir, policy, password) { emit(OperationEvent.Progress(it)) }
         emit(OperationEvent.Finished(result))
     }.flowOn(io)
 
@@ -198,23 +202,33 @@ class LocalFileOperator(
     override suspend fun findZipConflicts(
         zipPath: String,
         targetDir: String,
+        password: String?,
     ): List<ConflictInfo> = withContext(io) {
         val root = Paths.get(targetDir)
-        ZipFile(Paths.get(zipPath).toFile()).use { zip ->
-            zip.entries().asSequence()
-                .filter { !it.isDirectory }
-                .mapNotNull { entry ->
-                    val target = root.resolve(entry.name).normalize()
-                    if (!target.startsWith(root)) return@mapNotNull null
-                    if (Files.exists(target)) {
-                        ConflictInfo(entry.name, target.toString())
-                    } else {
-                        null
-                    }
-                }
-                .toList()
+        val names = runCatching { archiveNames(Paths.get(zipPath).toFile(), password) }.getOrDefault(emptyList())
+        names.mapNotNull { name ->
+            val target = root.resolve(name).normalize()
+            if (!target.startsWith(root)) return@mapNotNull null
+            if (Files.exists(target)) ConflictInfo(name, target.toString()) else null
         }
     }
+
+    /** 包里所有文件条目名；ZIP 优先读中央目录（加密包 `ZipFile` 打不开），7z 读容器头。 */
+    private fun archiveNames(archive: java.io.File, password: String?): List<String> {
+        if (isSevenZip(archive)) {
+            return SevenZipArchive.list(archive, password).filter { !it.isDirectory }.map { it.name }
+        }
+        ZipCentralDirectory.read(archive)?.let { entries ->
+            return entries.filter { !it.isDirectory }.map { it.name }
+        }
+        ZipFile(archive).use { zip ->
+            return zip.entries().asSequence().filter { !it.isDirectory }.map { it.name }.toList()
+        }
+    }
+
+    /** 扩展名不可信，先看头签名（`37 7A BC AF 27 1C`），再兜底认后缀。 */
+    private fun isSevenZip(file: java.io.File): Boolean =
+        file.name.lowercase().endsWith(".7z") || SevenZipArchive.matches(file)
 
     // ---------------------------------------------------------------- transfer --
 
@@ -527,101 +541,222 @@ class LocalFileOperator(
         zipPath: String,
         targetDir: String,
         policy: ConflictPolicy,
+        password: String?,
         report: suspend (OperationProgress) -> Unit,
     ): OperationResult {
+        val archive = Paths.get(zipPath).toFile()
         val root = Paths.get(targetDir)
+        report(OperationProgress(phase = OperationPhase.PREPARING, currentName = "正在统计…"))
+        return try {
+            if (isSevenZip(archive)) {
+                extractSevenZip(archive, root, policy, password, report)
+            } else {
+                extractZip(archive, root, policy, password, report)
+            }
+        } catch (wrong: ArchivePasswordException) {
+            OperationResult(failures = listOf(OperationFailure(zipPath, wrong.message ?: "密码不正确")))
+        }
+    }
+
+    /**
+     * ZIP 解压。
+     *
+     * 带密码的条目不再交给 `java.util.zip`（Android 14+ 会直接拒绝打开这种包），
+     * 改走自己的 [ZipEntryReader]：ZipCrypto 与 WinZip AES 都能解；密码不对在
+     * 第一条就抛出来，不会刷一屏失败项。
+     */
+    private suspend fun extractZip(
+        archive: java.io.File,
+        root: Path,
+        policy: ConflictPolicy,
+        password: String?,
+        report: suspend (OperationProgress) -> Unit,
+    ): OperationResult {
         val succeeded = mutableListOf<String>()
         val skipped = mutableListOf<String>()
         val failures = mutableListOf<OperationFailure>()
-        report(OperationProgress(phase = OperationPhase.PREPARING, currentName = "正在统计…"))
-
-        // 先读中央目录的加密位：带密码的条目在后面 extract 时只会抛一个
-        // "invalid entry CRC"，对用户没有意义，这里直接点名
-        val archive = Paths.get(zipPath).toFile()
-        val encrypted = ZipCentralDirectory.encryptedNames(archive)
-
-        // Android 14+ 的 ZipFile 干脆打不开带加密条目的包（invalid CEN header），
-        // 这时连遍历都做不到，直接告诉用户需要密码
-        val zipFile = try {
-            ZipFile(archive)
-        } catch (error: Exception) {
-            if (encrypted.isNotEmpty()) {
-                return OperationResult(
-                    failures = listOf(OperationFailure(zipPath, "压缩包已加密，暂不支持输入密码")),
+        val central = ZipCentralDirectory.read(archive)
+        if (central == null) {
+            // 中央目录读不出来（Zip64 / 非标准包）：回到 java.util.zip
+            return extractZipWithZipFile(archive, root, policy, report)
+        }
+        val tracker = ProgressTracker(
+            totalBytes = central.sumOf { if (it.isDirectory) 0L else it.size },
+            totalItems = central.size,
+            report = report,
+        )
+        Files.createDirectories(root)
+        try {
+            for (entry in central) {
+                coroutineContext.ensureActive()
+                extractEntry(
+                    root = root,
+                    name = entry.name,
+                    isDirectory = entry.isDirectory,
+                    policy = policy,
+                    tracker = tracker,
+                    open = { ZipEntryReader.open(archive, entry, password) },
+                    succeeded = succeeded,
+                    skipped = skipped,
+                    failures = failures,
                 )
             }
-            throw error
+        } catch (wrong: ArchivePasswordException) {
+            failures += OperationFailure(archive.path, wrong.message ?: "密码不正确")
         }
+        return OperationResult(succeeded, skipped = skipped, failures = failures)
+    }
 
-        zipFile.use { zip ->
+    /** 中央目录读不出来时的老路：整包交给 `java.util.zip`。 */
+    private suspend fun extractZipWithZipFile(
+        archive: java.io.File,
+        root: Path,
+        policy: ConflictPolicy,
+        report: suspend (OperationProgress) -> Unit,
+    ): OperationResult {
+        val succeeded = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
+        val failures = mutableListOf<OperationFailure>()
+        ZipFile(archive).use { zip ->
             val entries = zip.entries().toList()
-            val totalBytes = entries.sumOf { if (it.isDirectory) 0L else it.size.coerceAtLeast(0L) }
-            val tracker = ProgressTracker(totalBytes, entries.size, report)
+            val tracker = ProgressTracker(
+                totalBytes = entries.sumOf { if (it.isDirectory) 0L else it.size.coerceAtLeast(0L) },
+                totalItems = entries.size,
+                report = report,
+            )
             Files.createDirectories(root)
-
             for (entry in entries) {
                 coroutineContext.ensureActive()
-                if (entry.name in encrypted) {
-                    failures += OperationFailure(entry.name, "压缩包已加密，暂不支持输入密码")
-                    tracker.completeItem(entry.name)
-                    continue
-                }
-                var out = root.resolve(entry.name).normalize()
-                // Zip Slip：规范化后必须仍在目标目录内
-                if (!out.startsWith(root)) {
-                    failures += OperationFailure(entry.name, "非法的压缩包路径")
-                    continue
-                }
-                try {
-                    if (entry.isDirectory) {
-                        if (Files.exists(out) && !Files.isDirectory(out)) {
-                            when (policy) {
-                                ConflictPolicy.SKIP -> {
-                                    skipped += entry.name
-                                    tracker.completeItem(entry.name)
-                                    continue
-                                }
-                                ConflictPolicy.REPLACE -> deleteRecursively(out)
-                                ConflictPolicy.RENAME -> out = uniquePath(out)
-                            }
-                        }
-                        Files.createDirectories(out)
-                        succeeded += out.toString()
-                        tracker.completeItem(entry.name)
-                    } else {
-                        if (Files.exists(out)) {
-                            when (policy) {
-                                ConflictPolicy.SKIP -> {
-                                    skipped += entry.name
-                                    tracker.completeItem(entry.name)
-                                    continue
-                                }
-                                ConflictPolicy.REPLACE -> Unit
-                                ConflictPolicy.RENAME -> out = uniquePath(out)
-                            }
-                        }
-                        out.parent?.let { Files.createDirectories(it) }
-                        zip.getInputStream(entry).use { input ->
-                            Files.newOutputStream(
-                                out,
-                                StandardOpenOption.CREATE,
-                                StandardOpenOption.TRUNCATE_EXISTING,
-                                StandardOpenOption.WRITE,
-                            ).use { output ->
-                                copyStream(input, output, entry.name, tracker)
-                            }
-                        }
-                        succeeded += out.toString()
-                        tracker.completeItem(entry.name)
-                    }
-                } catch (cancel: CancellationException) {
-                    throw cancel
-                } catch (error: Exception) {
-                    failures += OperationFailure(entry.name, error.userMessage())
-                }
+                extractEntry(
+                    root = root,
+                    name = entry.name,
+                    isDirectory = entry.isDirectory,
+                    policy = policy,
+                    tracker = tracker,
+                    open = { zip.getInputStream(entry) },
+                    succeeded = succeeded,
+                    skipped = skipped,
+                    failures = failures,
+                )
             }
         }
         return OperationResult(succeeded, skipped = skipped, failures = failures)
+    }
+
+    /** 7z 解压：顺序解压容器，密码对了一次走完。 */
+    private suspend fun extractSevenZip(
+        archive: java.io.File,
+        root: Path,
+        policy: ConflictPolicy,
+        password: String?,
+        report: suspend (OperationProgress) -> Unit,
+    ): OperationResult {
+        val succeeded = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
+        val failures = mutableListOf<OperationFailure>()
+        SevenZipArchive.open(archive, password).use { session ->
+            val entries = session.entries
+            val tracker = ProgressTracker(
+                totalBytes = entries.sumOf { if (it.isDirectory) 0L else it.size },
+                totalItems = entries.size,
+                report = report,
+            )
+            Files.createDirectories(root)
+            try {
+                for (entry in entries) {
+                    coroutineContext.ensureActive()
+                    extractEntry(
+                        root = root,
+                        name = entry.name,
+                        isDirectory = entry.isDirectory,
+                        policy = policy,
+                        tracker = tracker,
+                        open = { session.open(entry.name) },
+                        succeeded = succeeded,
+                        skipped = skipped,
+                        failures = failures,
+                    )
+                }
+            } catch (wrong: ArchivePasswordException) {
+                failures += OperationFailure(archive.path, wrong.message ?: "密码不正确")
+            }
+        }
+        return OperationResult(succeeded, skipped = skipped, failures = failures)
+    }
+
+    /**
+     * 解一条（ZIP 与 7z 共用）：Zip Slip 校验、冲突策略、进度、失败登记都在这。
+     *
+     * [open] 只是在真正要写文件时才调用——被跳过的条目不会白白解开一遍。
+     */
+    private suspend fun extractEntry(
+        root: Path,
+        name: String,
+        isDirectory: Boolean,
+        policy: ConflictPolicy,
+        tracker: ProgressTracker,
+        open: () -> InputStream,
+        succeeded: MutableList<String>,
+        skipped: MutableList<String>,
+        failures: MutableList<OperationFailure>,
+    ) {
+        var out = root.resolve(name).normalize()
+        // Zip Slip：规范化后必须仍在目标目录内
+        if (!out.startsWith(root)) {
+            failures += OperationFailure(name, "非法的压缩包路径")
+            tracker.completeItem(name)
+            return
+        }
+        if (isDirectory) {
+            if (Files.exists(out) && !Files.isDirectory(out)) {
+                when (policy) {
+                    ConflictPolicy.SKIP -> {
+                        skipped += name
+                        tracker.completeItem(name)
+                        return
+                    }
+                    ConflictPolicy.REPLACE -> deleteRecursively(out)
+                    ConflictPolicy.RENAME -> out = uniquePath(out)
+                }
+            }
+            Files.createDirectories(out)
+            succeeded += out.toString()
+            tracker.completeItem(name)
+            return
+        }
+        if (Files.exists(out)) {
+            when (policy) {
+                ConflictPolicy.SKIP -> {
+                    skipped += name
+                    tracker.completeItem(name)
+                    return
+                }
+                ConflictPolicy.REPLACE -> Unit
+                ConflictPolicy.RENAME -> out = uniquePath(out)
+            }
+        }
+        try {
+            out.parent?.let { Files.createDirectories(it) }
+            open().use { input ->
+                Files.newOutputStream(
+                    out,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE,
+                ).use { output ->
+                    copyStream(input, output, name, tracker)
+                }
+            }
+            succeeded += out.toString()
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (password: ArchivePasswordException) {
+            // 密码问题不是「这一条坏了」，整包都解不开，交给上层收尾
+            throw password
+        } catch (error: Exception) {
+            failures += OperationFailure(name, error.userMessage())
+        }
+        tracker.completeItem(name)
     }
 
     // ----------------------------------------------------------------- helpers --
