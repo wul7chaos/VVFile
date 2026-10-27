@@ -177,6 +177,7 @@ fun PathInputDialog(
                                 if (text.isNotEmpty()) {
                                     clipboard.setText(AnnotatedString(text))
                                     Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
+                                    onDismiss()
                                 }
                             },
                         ) { Text("复制路径") }
