@@ -174,6 +174,8 @@ fun ArchiveScreen(
                         isSelected = false,
                         // 压缩包内条目没有权限/所有者，详情行显示大小更有用
                         showDetails = false,
+                        // 包内条目还没落盘，没有可解码的源文件，别去试缩略图
+                        showThumbnail = false,
                         onClick = {
                             if (entry.isDirectory) {
                                 currentDir = entry.name.trimEnd('/')
