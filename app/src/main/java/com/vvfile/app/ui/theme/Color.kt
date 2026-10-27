@@ -25,11 +25,3 @@ val VVLightTextSecondary = Color(0xFF5B6575)
 val VVLightAccent = Color(0xFF5B4BE0)
 val VVLightAccentSoft = Color(0xFFE8E5FF)
 
-/** 文件分类色，仅用于图标着色。 */
-val FileTintDefault = Color(0xFF9AA5B5)
-val FileTintImage = Color(0xFF34D399)
-val FileTintVideo = Color(0xFFF5A524)
-val FileTintAudio = Color(0xFFF0546A)
-val FileTintArchive = Color(0xFFC084FC)
-val FileTintText = Color(0xFF60A5FA)
-val FileTintApk = Color(0xFF2DD4BF)

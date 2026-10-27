@@ -22,15 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
-import androidx.compose.material.icons.outlined.Android
-import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.FolderZip
-import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,11 +38,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -59,17 +51,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.vvfile.app.R
 import com.vvfile.app.core.format.SizeFormatter
 import com.vvfile.app.core.format.TimeFormatter
 import com.vvfile.app.core.thumb.Thumbnails
 import com.vvfile.app.data.model.FileEntry
-import com.vvfile.app.ui.theme.FileTintApk
-import com.vvfile.app.ui.theme.FileTintArchive
-import com.vvfile.app.ui.theme.FileTintAudio
-import com.vvfile.app.ui.theme.FileTintDefault
-import com.vvfile.app.ui.theme.FileTintImage
-import com.vvfile.app.ui.theme.FileTintText
-import com.vvfile.app.ui.theme.FileTintVideo
+import com.vvfile.app.data.model.FileKind
+import com.vvfile.app.data.model.IMAGE_EXTENSIONS
+import com.vvfile.app.data.model.VIDEO_EXTENSIONS
+import com.vvfile.app.data.model.kindOf
 import com.vvfile.app.ui.theme.VVFileTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -226,10 +216,11 @@ private fun FileLeading(entry: FileEntry, showThumbnail: Boolean) {
             )
         } else {
             Icon(
-                imageVector = iconFor(entry),
+                painter = painterResource(iconFor(entry)),
                 contentDescription = if (entry.isDirectory) "文件夹" else "文件",
-                tint = tintFor(entry),
-                modifier = Modifier.size(20.dp),
+                // 图标自带配色，不能被主题色染色
+                tint = Color.Unspecified,
+                modifier = Modifier.size(28.dp),
             )
         }
     }
@@ -249,39 +240,28 @@ private fun metaFor(entry: FileEntry, showDetails: Boolean): String {
     return if (entry.isDirectory) "文件夹 · $time" else "${SizeFormatter.format(entry.size)} · $time"
 }
 
-private val imageExt = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "svg")
-private val videoExt = setOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "flv", "ts")
-// 能出缩略图的类型：svg 是矢量图，BitmapFactory 解不了，老老实实显示图标
-private val thumbImageExt = imageExt - "svg"
-private val thumbVideoExt = videoExt
-private val audioExt = setOf("mp3", "flac", "wav", "aac", "ogg", "m4a", "opus", "amr")
-private val archiveExt = setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz", "zst", "apk", "jar")
-private val textExt = setOf(
-    "txt", "md", "json", "xml", "yaml", "yml", "log", "ini", "conf", "properties",
-    "html", "htm", "css", "js", "ts", "kt", "java", "py", "sh", "c", "h", "cpp",
-)
+// 能出缩略图的类型：svg 是矢量图、ico/tiff 是少见格式，BitmapFactory 解不干净，老实显示图标
+private val thumbImageExt = IMAGE_EXTENSIONS - setOf("svg", "ico", "tif", "tiff")
+private val thumbVideoExt = VIDEO_EXTENSIONS
 
-private fun iconFor(entry: FileEntry): ImageVector = when {
-    entry.isDirectory -> Icons.Outlined.Folder
-    entry.extension in imageExt -> Icons.Outlined.Image
-    entry.extension in videoExt -> Icons.Outlined.Movie
-    entry.extension in audioExt -> Icons.Outlined.MusicNote
-    entry.extension == "apk" -> Icons.Outlined.Android
-    entry.extension in archiveExt -> Icons.Outlined.FolderZip
-    entry.extension in textExt -> Icons.Outlined.Description
-    else -> Icons.AutoMirrored.Outlined.InsertDriveFile
-}
-
-@Composable
-private fun tintFor(entry: FileEntry): Color = when {
-    entry.isDirectory -> MaterialTheme.colorScheme.primary
-    entry.extension in imageExt -> FileTintImage
-    entry.extension in videoExt -> FileTintVideo
-    entry.extension in audioExt -> FileTintAudio
-    entry.extension == "apk" -> FileTintApk
-    entry.extension in archiveExt -> FileTintArchive
-    entry.extension in textExt -> FileTintText
-    else -> FileTintDefault
+private fun iconFor(entry: FileEntry): Int = when (kindOf(entry)) {
+    FileKind.Folder -> R.drawable.vvfile_ic_folder
+    FileKind.Image -> R.drawable.vvfile_ic_image
+    FileKind.Video -> R.drawable.vvfile_ic_video
+    FileKind.Audio -> R.drawable.vvfile_ic_audio
+    FileKind.Apk -> R.drawable.vvfile_ic_apk
+    FileKind.Archive -> R.drawable.vvfile_ic_archive
+    FileKind.Text -> R.drawable.vvfile_ic_text
+    FileKind.Pdf -> R.drawable.vvfile_ic_pdf
+    FileKind.Doc -> R.drawable.vvfile_ic_doc
+    FileKind.Sheet -> R.drawable.vvfile_ic_sheet
+    FileKind.Slides -> R.drawable.vvfile_ic_slides
+    FileKind.Code -> R.drawable.vvfile_ic_code
+    FileKind.Config -> R.drawable.vvfile_ic_config
+    FileKind.Script -> R.drawable.vvfile_ic_script
+    FileKind.Db -> R.drawable.vvfile_ic_db
+    FileKind.Font -> R.drawable.vvfile_ic_font
+    FileKind.Unknown -> R.drawable.vvfile_ic_unknown
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF171C24)
