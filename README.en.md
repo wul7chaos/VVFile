@@ -37,6 +37,14 @@ One pane for folders, one for files. The pane you touch becomes the active pane.
 - Built-in terminal: real PTY with VT emulation, sticky modifier keys, adjustable font size
 - Installed apps list: package, version, size, data directory, one tap to browse it
 
+## Download
+
+Grab a signed build:
+
+**https://github.com/wul7chaos/VVFile/releases/latest** → `VVFile-<version>.apk`
+
+Or install it yourself: `adb install -r VVFile-<version>.apk`
+
 ## Install
 
 ```powershell
@@ -59,6 +67,22 @@ Unit tests:
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest
 ```
+
+### Releasing
+
+The tag decides the version. `.github/workflows/release.yml` runs the unit tests,
+builds a signed APK, creates the release and attaches the APK:
+
+```powershell
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+`versionName` is the tag minus `v` (`1.0.1`); `versionCode` is derived from semver
+(`1.0.1` → `10001`). The signing key lives in repository secrets
+(`VVFILE_KEYSTORE_BASE64` / `VVFILE_KEYSTORE_PASSWORD` / `VVFILE_KEY_ALIAS` /
+`VVFILE_KEY_PASSWORD`); local builds read `keystore.properties` in the repo root,
+which is gitignored.
 
 ## On reverse engineering
 

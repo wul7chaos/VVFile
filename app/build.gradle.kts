@@ -1,10 +1,33 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
+// 版本号：CI 从 tag 注入（-PvvVersionName=1.0.0 -PvvVersionCode=10000），本地不传就是 1.0/1
+val vvVersionName: String = providers.gradleProperty("vvVersionName").orNull ?: "1.0"
+val vvVersionCode: Int = providers.gradleProperty("vvVersionCode").orNull?.toIntOrNull() ?: 1
+
+// 发布签名：优先读本地 keystore.properties（已 gitignore），其次读 CI 注入的环境变量。
+// 两处都没有时退回 debug 签名，保证 clone 下来直接 assembleRelease 能出包。
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.isFile) f.inputStream().use { load(it) }
+}
+fun secret(prop: String, env: String): String? =
+    keystoreProps.getProperty(prop)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+
+val releaseStorePath = secret("storeFile", "VVFILE_KEYSTORE_FILE")
+val releaseStorePassword = secret("storePassword", "VVFILE_KEYSTORE_PASSWORD")
+val releaseKeyAlias = secret("keyAlias", "VVFILE_KEY_ALIAS")
+val releaseKeyPassword = secret("keyPassword", "VVFILE_KEY_PASSWORD")
+val hasReleaseSigning =
+    releaseStorePath != null && releaseStorePassword != null && releaseKeyAlias != null
 
 android {
     namespace = "com.vvfile.app"
@@ -15,8 +38,8 @@ android {
         applicationId = "com.vvfile.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = vvVersionCode
+        versionName = vvVersionName
 
         vectorDrawables { useSupportLibrary = true }
 
@@ -37,6 +60,18 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = File(releaseStorePath!!)
+                    .let { if (it.isAbsolute) it else rootProject.file(releaseStorePath!!) }
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword ?: releaseStorePassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -48,8 +83,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // 本地验证用；正式发布改为环境变量注入的 keystore
-            signingConfig = signingConfigs.getByName("debug")
+            // 有发布签名就用发布签名；没有就退回 debug 签名，本地也能直接 assembleRelease
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
         }
     }
 

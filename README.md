@@ -37,6 +37,14 @@ Android 上的双窗格文件管理器，v1.0。
 - 内置终端：真实 PTY + VT 仿真，支持粘滞修饰键与字号调节
 - 已安装应用列表：包名、版本、大小、数据目录，可一键跳到数据目录
 
+## 下载
+
+直接取签好名的安装包：
+
+**https://github.com/wul7chaos/VVFile/releases/latest** → `VVFile-<版本>.apk`
+
+想自己装：`adb install -r VVFile-<版本>.apk`
+
 ## 安装
 
 ```powershell
@@ -59,6 +67,21 @@ adb install -r app\build\outputs\apk\release\app-release.apk
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest
 ```
+
+### 发版
+
+版本号由 tag 决定，`.github/workflows/release.yml` 会自动跑单测、打签名包、
+建 Release 并把 APK 挂上去：
+
+```powershell
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+`versionName` 取 tag 去掉 `v`（`1.0.1`），`versionCode` 由 semver 折算
+（`1.0.1` → `10001`）。签名密钥放在仓库 Secrets 里
+（`VVFILE_KEYSTORE_BASE64` / `VVFILE_KEYSTORE_PASSWORD` / `VVFILE_KEY_ALIAS` /
+`VVFILE_KEY_PASSWORD`），本地构建则读根目录的 `keystore.properties`（已 gitignore）。
 
 ## 关于逆向
 
