@@ -33,6 +33,7 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.vvfile.app.core.format.MimeTypes
+import com.vvfile.app.core.io.RootStaging
 import com.vvfile.app.core.path.WorkspaceLayout
 import com.vvfile.app.core.share.FileOpener
 import com.vvfile.app.core.shell.RootAccess
@@ -64,6 +65,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+
+    /** root-only 文件的落地缓存，只给只读打开用（播放器/解码器/压缩包）。 */
+    private val rootStaging = RootStaging()
 
     /** 从「定位所在目录」带上来的目标文件；Compose 消费后清空。 */
     private val locatePath = mutableStateOf<String?>(null)
@@ -147,6 +151,25 @@ class MainActivity : ComponentActivity() {
                 }
 
                 /**
+                 * 只读打开前先确认应用自己读得到：root-only 目录（`/data/adb` 等）里的
+                 * 文件先复制一份到缓存再交给播放器/解码器——它们只认路径，不会用 su。
+                 *
+                 * 文本编辑器刻意不走这里：它要改的是**原文件**，
+                 * 拿缓存副本编辑再把保存写到缓存里，等于改了没生效。
+                 */
+                fun openReadOnly(path: String, onReady: (String) -> Unit) {
+                    val readable = runCatching { File(path).canRead() }.getOrDefault(false)
+                    if (readable || !RootAccess.allowed()) {
+                        onReady(path)
+                        return
+                    }
+                    lifecycleScope.launch {
+                        val staged = withContext(Dispatchers.IO) { rootStaging.stage(path) }
+                        onReady(staged?.absolutePath ?: path)
+                    }
+                }
+
+                /**
                  * 按类型打开一个真实路径：音视频/图片进内置播放器，文本进编辑器，
                  * 其余交给系统。压缩包浏览里解出来的临时文件也走这里。
                  */
@@ -154,25 +177,31 @@ class MainActivity : ComponentActivity() {
                     when (MediaFormats.kindOf(path)) {
                         MediaKind.AUDIO -> {
                             ensureNotificationPermission()
-                            audioPath = path
-                            audioMinimized = false
+                            openReadOnly(path) { ready ->
+                                audioPath = ready
+                                audioMinimized = false
+                            }
                         }
                         MediaKind.VIDEO -> {
                             // 看视频时把后台音频收住，避免两个声音叠在一起
                             if (AudioEngine.state.value.playing) {
                                 AudioEngine.togglePlayPause()
                             }
-                            videoPath = path
+                            openReadOnly(path) { ready -> videoPath = ready }
                         }
-                        MediaKind.IMAGE -> imagePath = path
+                        MediaKind.IMAGE -> openReadOnly(path) { ready -> imagePath = ready }
                         null -> if (MimeTypes.isText(path)) {
                             editingPath = path
-                        } else if (!FileOpener.open(this@MainActivity, path)) {
-                            Toast.makeText(
-                                this@MainActivity,
-                                "没有可打开该文件的应用",
-                                Toast.LENGTH_SHORT,
-                            ).show()
+                        } else {
+                            openReadOnly(path) { ready ->
+                                if (!FileOpener.open(this@MainActivity, ready)) {
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "没有可打开该文件的应用",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            }
                         }
                     }
                 }
@@ -196,7 +225,8 @@ class MainActivity : ComponentActivity() {
                         onOpenFile = { path ->
                             // 点压缩包直接进去看，而不是弹「选择打开方式」
                             if (path.endsWith(".zip", ignoreCase = true)) {
-                                archivePath = path
+                                // root-only 目录里的包也要先落地一份，ZipFile 只认路径
+                                openReadOnly(path) { ready -> archivePath = ready }
                             } else {
                                 openPath(path)
                             }

@@ -1,10 +1,12 @@
 package com.vvfile.app.feature.editor
 
+import com.vvfile.app.core.io.RootFileChannel
+import com.vvfile.app.core.io.SuRootFileChannel
 import com.vvfile.app.core.path.PathUtils
+import com.vvfile.app.core.shell.RootAccess
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
@@ -17,7 +19,6 @@ import java.nio.file.InvalidPathException
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.nio.file.StandardOpenOption
 
 /** 编辑器支持的文本编码，识别顺序固定为 UTF-8 → GBK。 */
 enum class TextEncoding(
@@ -55,43 +56,87 @@ class EditorException(
  *
  * - 读取：严格 UTF-8 解码，失败回退 GBK；> 5 MB 只读预览（截断到 2 MB）。
  * - 保存：沿用打开时的编码，严格编码（不可表示的字符直接报错，不做静默替换）。
+ * - 应用 uid 读不到（`/data/adb` 这类 root-only 目录）时，经 [root] 通道用 `su` 读，
+ *   属性面板能看、能删的目录，点开文件不该报「没有权限」。
  *
  * 所有磁盘操作在 [dispatcher] 上执行；异常统一转成 [EditorException] 的中文文案。
  */
 class EditorFileGateway(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val root: RootFileChannel = SuRootFileChannel(),
+    private val rootAllowed: () -> Boolean = { RootAccess.allowed() },
+    private val direct: DirectFileChannel = NioDirectFileChannel,
 ) {
 
     suspend fun read(path: String, forced: TextEncoding? = null): EditorDocument = withContext(dispatcher) {
         val file = resolveForRead(path)
         try {
-            if (Files.isDirectory(file)) throw EditorException(MSG_IS_DIRECTORY)
-            val size = Files.size(file)
-            // 两个门槛是分开的：
-            // - readOnly：超过 5 MB 就不允许保存（编辑器不适合改这么大的文本）；
-            // - truncated：超过 16 MB 只读前 16 MB，避免把整个文件读进内存。
-            // 大文件用「按行虚拟化的只读查看器」显示（见 LargeTextReader），秒开、可滚动。
-            val readOnly = size > MAX_EDITABLE_BYTES
-            val truncated = size > MAX_LOAD_BYTES
-            val limit = if (truncated) MAX_LOAD_BYTES else size
-            val bytes = readPrefix(file, limit)
-            val (encoding, text) = if (forced != null) {
-                forced to String(bytes, forced.charset)
-            } else {
-                decode(bytes, truncated)
-            }
-            EditorDocument(text = text, encoding = encoding, truncated = truncated, readOnly = readOnly)
+            if (direct.isDirectory(file)) throw EditorException(MSG_IS_DIRECTORY)
+            val size = direct.size(file)
+            buildDocument(size, forced) { limit -> direct.readPrefix(file, limit) }
         } catch (known: EditorException) {
             throw known
         } catch (missing: NoSuchFileException) {
             throw EditorException(MSG_MISSING, missing)
         } catch (denied: AccessDeniedException) {
-            throw EditorException(MSG_READ_DENIED, denied)
+            readViaRoot(path, forced, denied)
         } catch (denied: SecurityException) {
-            throw EditorException(MSG_READ_DENIED, denied)
+            readViaRoot(path, forced, denied)
         } catch (io: IOException) {
             throw EditorException("读取文件失败：${io.message ?: "未知错误"}", io)
         }
+    }
+
+    /**
+     * 直接通道被拒后的兜底：`stat` 拿大小，再用 `su -c cat` 流式读前若干字节。
+     *
+     * 目录判定也走 root，因为对被拒绝的路径 `Files.isDirectory` 只会静默返回 false。
+     */
+    private suspend fun readViaRoot(
+        path: String,
+        forced: TextEncoding?,
+        cause: Throwable,
+    ): EditorDocument {
+        if (!rootAllowed()) throw EditorException(MSG_READ_DENIED, cause)
+        val normalized = PathUtils.normalize(path)
+        val meta = try {
+            root.stat(normalized)
+        } catch (error: Exception) {
+            throw EditorException("root 读取失败：${error.message ?: "未知错误"}", error)
+        } ?: throw EditorException(MSG_READ_DENIED, cause)
+        if (meta.isDirectory) throw EditorException(MSG_IS_DIRECTORY)
+        return try {
+            buildDocument(meta.size, forced) { limit -> root.readPrefix(normalized, limit) }
+        } catch (known: EditorException) {
+            throw known
+        } catch (error: Exception) {
+            throw EditorException("root 读取失败：${error.message ?: "未知错误"}", error)
+        }
+    }
+
+    /**
+     * 按 [size] 决定只读/截断，再读字节解码。
+     *
+     * 两个门槛是分开的：
+     * - readOnly：超过 5 MB 就不允许保存（编辑器不适合改这么大的文本）；
+     * - truncated：超过 16 MB 只读前 16 MB，避免把整个文件读进内存。
+     * 大文件用「按行虚拟化的只读查看器」显示（见 LargeTextReader），秒开、可滚动。
+     */
+    private suspend fun buildDocument(
+        size: Long,
+        forced: TextEncoding?,
+        read: suspend (Long) -> ByteArray,
+    ): EditorDocument {
+        val readOnly = size > MAX_EDITABLE_BYTES
+        val truncated = size > MAX_LOAD_BYTES
+        val limit = if (truncated) MAX_LOAD_BYTES else size
+        val bytes = read(limit)
+        val (encoding, text) = if (forced != null) {
+            forced to String(bytes, forced.charset)
+        } else {
+            decode(bytes, truncated)
+        }
+        return EditorDocument(text = text, encoding = encoding, truncated = truncated, readOnly = readOnly)
     }
 
     /**
@@ -101,35 +146,47 @@ class EditorFileGateway(
      */
     suspend fun save(path: String, text: String, encoding: TextEncoding) = withContext(dispatcher) {
         val file = resolveForSave(path)
-        try {
-            if (Files.exists(file) && Files.isDirectory(file)) throw EditorException(MSG_IS_DIRECTORY_SAVE)
-            val currentSize = if (Files.exists(file)) Files.size(file) else 0L
-            if (currentSize > MAX_EDITABLE_BYTES) throw EditorException(MSG_READONLY_SAVE)
-            val bytes = try {
-                encodeStrict(text, encoding)
-            } catch (coding: CharacterCodingException) {
-                throw EditorException(
-                    "当前编码（${encoding.label}）无法表示部分字符，请改用 UTF-8 保存",
-                    coding,
-                )
-            }
-            Files.write(
-                file,
-                bytes,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE,
+        val bytes = try {
+            encodeStrict(text, encoding)
+        } catch (coding: CharacterCodingException) {
+            throw EditorException(
+                "当前编码（${encoding.label}）无法表示部分字符，请改用 UTF-8 保存",
+                coding,
             )
+        }
+        try {
+            if (direct.exists(file) && direct.isDirectory(file)) throw EditorException(MSG_IS_DIRECTORY_SAVE)
+            val currentSize = if (direct.exists(file)) direct.size(file) else 0L
+            if (currentSize > MAX_EDITABLE_BYTES) throw EditorException(MSG_READONLY_SAVE)
+            direct.write(file, bytes)
         } catch (known: EditorException) {
             throw known
         } catch (denied: AccessDeniedException) {
-            throw EditorException(MSG_WRITE_DENIED, denied)
+            writeViaRoot(path, bytes, denied)
         } catch (denied: SecurityException) {
-            throw EditorException(MSG_WRITE_DENIED, denied)
+            writeViaRoot(path, bytes, denied)
         } catch (missing: NoSuchFileException) {
             throw EditorException("保存失败：目标目录不存在", missing)
         } catch (io: IOException) {
             throw EditorException("保存文件失败：${io.message ?: "未知错误"}", io)
+        }
+    }
+
+    /** 直接通道写不进去时的兜底：落缓存文件再让 root 覆盖过去（保留原文件权限位）。 */
+    private suspend fun writeViaRoot(path: String, bytes: ByteArray, cause: Throwable) {
+        if (!rootAllowed()) throw EditorException(MSG_WRITE_DENIED, cause)
+        val normalized = PathUtils.normalize(path)
+        val meta = try {
+            root.stat(normalized)
+        } catch (error: Exception) {
+            throw EditorException("root 保存失败：${error.message ?: "未知错误"}", error)
+        }
+        if (meta?.isDirectory == true) throw EditorException(MSG_IS_DIRECTORY_SAVE)
+        if (meta != null && meta.size > MAX_EDITABLE_BYTES) throw EditorException(MSG_READONLY_SAVE)
+        try {
+            root.writeAll(normalized, bytes)
+        } catch (error: Exception) {
+            throw EditorException("root 保存失败：${error.message ?: "未知错误"}", error)
         }
     }
 
@@ -143,23 +200,6 @@ class EditorFileGateway(
             Paths.get(PathUtils.normalize(raw))
         } catch (invalid: InvalidPathException) {
             throw EditorException(MSG_INVALID_PATH, invalid)
-        }
-    }
-
-    /** 精确读取前 [limit] 字节，避免把大文件整个读进内存。 */
-    private fun readPrefix(file: Path, limit: Long): ByteArray {
-        if (limit <= 0L) return ByteArray(0)
-        Files.newInputStream(file).use { input ->
-            val output = ByteArrayOutputStream(limit.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-            val chunk = ByteArray(DEFAULT_BUFFER_SIZE)
-            var remaining = limit
-            while (remaining > 0L) {
-                val read = input.read(chunk, 0, minOf(chunk.size.toLong(), remaining).toInt())
-                if (read < 0) break
-                output.write(chunk, 0, read)
-                remaining -= read
-            }
-            return output.toByteArray()
         }
     }
 
@@ -264,8 +304,6 @@ class EditorFileGateway(
          * 所以 200k 字符（约 400 KB 中文）以上一律走虚拟化路径。
          */
         const val LARGE_TEXT_CHARS: Int = 200_000
-
-        private const val DEFAULT_BUFFER_SIZE = 64 * 1024
 
         private const val MSG_EMPTY_PATH = "路径为空，无法打开"
         private const val MSG_INVALID_PATH = "路径无效，无法打开"

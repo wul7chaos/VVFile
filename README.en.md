@@ -27,7 +27,8 @@ One pane for folders, one for files. The pane you touch becomes the active pane.
 - Properties for a single item or a multi-selection
 - Permission editor: 9-cell rwx grid, real permissions for shell scripts
 - Share, open with
-- NIO on the file-system layer; optional root channel reaches `/data`, `/system` and friends
+- NIO on the file-system layer; optional root channel reaches `/data`, `/system` and friends,
+  files inside included — open and save them directly
 
 **Viewers**
 
