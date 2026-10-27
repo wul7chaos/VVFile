@@ -205,7 +205,7 @@ class MainActivity : ComponentActivity() {
                 fun openPath(path: String) {
                     // 压缩包（zip/apk/tar/tar.gz）一律先进包内浏览：想把 APK 交给安装器、
                     // 或交给别的应用，走长按「打开方式」
-                    if (ArchiveFormats.isArchive(path)) {
+                    if (ArchiveFormats.isArchive(File(path))) {
                         openReadOnly(path) { ready -> archivePath = ready }
                         return
                     }

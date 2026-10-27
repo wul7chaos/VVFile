@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.vvfile.app.data.model.FileEntry
+import com.vvfile.app.feature.archive.ArchiveFormats
 
 /**
  * 长按菜单的目标：条目 + 它所在的窗格（决定复制/移动的方向文案）+ 本次操作的整批条目。
@@ -90,7 +91,7 @@ fun FileActionMenu(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
-    val isArchive = !target.multi && !entry.isDirectory && entry.extension in ARCHIVE_EXTENSIONS
+    val isArchive = !target.multi && !entry.isDirectory && ArchiveFormats.canExtract(entry.path)
     val copyLabel = if (pane == PaneId.LEFT) "复制 ->" else "<- 复制"
     val moveLabel = if (pane == PaneId.LEFT) "移动 ->" else "<- 移动"
 
@@ -261,4 +262,3 @@ private fun MenuRow(
     }
 }
 
-private val ARCHIVE_EXTENSIONS = setOf("zip", "apk")

@@ -106,6 +106,10 @@ dependencies {
     }
     implementation(libs.commons.io)
     implementation(libs.xz)
+    // rar / rar5 / rar 自解压：junrar 是纯 Java 实现（无 native 依赖）
+    implementation(libs.junrar)
+    // junrar 只用 slf4j 打日志；Android 上没有 provider 会一直往 stderr 刷警告
+    runtimeOnly(libs.slf4j.nop)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.ui)

@@ -14,6 +14,8 @@ media3 = "1.11.1"
 commonsCompress = "1.28.0"
 xz = "1.10"
 commonsIo = "2.20.0"
+junrar = "8.1.2"
+slf4j = "2.0.17"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -39,6 +41,8 @@ androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.re
 # 单测里 android.jar 的 org.json 是空壳，换成真实现（只在 test 配置生效）
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 commons-io = { group = "commons-io", name = "commons-io", version.ref = "commonsIo" }
+junrar = { group = "com.github.junrar", name = "junrar", version.ref = "junrar" }
+slf4j-nop = { group = "org.slf4j", name = "slf4j-nop", version.ref = "slf4j" }
 xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }
 json = { group = "org.json", name = "json", version = "20240303" }
 

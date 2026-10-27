@@ -34,6 +34,29 @@ class ArchiveFormatsTest {
         assertNull(ArchiveFormats.kindOf("/sdcard/a.txt"))
         assertNull(ArchiveFormats.kindOf("/sdcard/a.tar.xz"))
         assertFalse(ArchiveFormats.isArchive("/sdcard/readme.md"))
+        assertEquals(ArchiveKind.RAR, ArchiveFormats.kindOf("/sdcard/a.rar"))
+        assertEquals(ArchiveKind.RAR, ArchiveFormats.kindOf("/sdcard/part1.RAR"))
+    }
+
+    @Test
+    fun `扩展名撒谎时按字节判定`() {
+        val rar = javaClass.getResourceAsStream("/archives/rar5.rar")!!.use { it.readBytes() }
+        // 名字叫 exe、内容其实是自解压 RAR
+        val sfx = temp.newFile("setup.exe")
+        sfx.outputStream().use { out ->
+            out.write("MZ".toByteArray())
+            out.write(ByteArray(1024))
+            out.write(rar)
+        }
+        assertEquals(ArchiveKind.RAR, ArchiveFormats.of(sfx))
+        assertTrue(ArchiveFormats.isArchive(sfx))
+        assertTrue(ArchiveFormats.canExtract(sfx))
+
+        // 普通文本不能被误判
+        val text = temp.newFile("note.bin").apply { writeText("just text, nothing else") }
+        assertNull(ArchiveFormats.of(text))
+        assertFalse(ArchiveFormats.isArchive(text))
+        assertFalse(ArchiveFormats.canExtract(text))
     }
 
     @Test

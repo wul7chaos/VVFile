@@ -413,7 +413,7 @@ class BrowserViewModel : ViewModel() {
         if (isBusy()) return notifyBusy()
         val pane = activePaneState()
         val archive = selectedEntries(pane).singleOrNull()
-            ?.takeIf { !it.isDirectory && ArchiveFormats.canExtract(it.path) }
+            ?.takeIf { !it.isDirectory && ArchiveFormats.canExtract(File(it.path)) }
             ?: return postMessage(UiMessage.Simple(R.string.ui_ops_unzip_requires_zip))
         val target = targetDir?.trim()?.takeIf { it.isNotEmpty() } ?: pane.path
         if (target.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))

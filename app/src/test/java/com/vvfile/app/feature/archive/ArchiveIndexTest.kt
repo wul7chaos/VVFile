@@ -199,4 +199,41 @@ class ArchiveIndexTest {
         assertNotNull(extracted)
         assertEquals("hello from VVFile", extracted!!.readText())
     }
+
+    @Test
+    fun `rar 也能像 zip 一样逐层浏览和解出`() {
+        val path = fixture("rar5.rar").absolutePath
+        val entries = ArchiveIndex.read(path)
+        assertEquals(listOf("docs/", "a.txt"), ArchiveIndex.children(entries, "").map { it.name })
+
+        val out = temp.newFolder("rar-out")
+        val extracted = ArchiveIndex.extractTo(path, "docs/b.txt", out)
+        assertNotNull(extracted)
+        assertEquals(500, extracted!!.length().toInt())
+    }
+
+    @Test
+    fun `自解压 zip 的偏移能被纠正`() {
+        // 先造一个正常 zip，再在前面垫 stub：中央目录里的偏移是相对归档体的
+        val plain = temp.newFile("plain.zip")
+        ZipOutputStream(plain.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry("docs/guide.md"))
+            zip.write("# guide".toByteArray())
+            zip.closeEntry()
+        }
+        val sfx = temp.newFile("setup.zip.exe")
+        sfx.outputStream().use { out ->
+            out.write("MZ".toByteArray())
+            out.write(ByteArray(3000))
+            out.write(plain.readBytes())
+        }
+
+        val entries = ArchiveIndex.read(sfx.absolutePath)
+        assertEquals(listOf("docs/guide.md"), entries.map { it.name })
+
+        val out = temp.newFolder("sfx-out")
+        val extracted = ArchiveIndex.extractTo(sfx.absolutePath, "docs/guide.md", out)
+        assertNotNull(extracted)
+        assertEquals("# guide", extracted!!.readText())
+    }
 }

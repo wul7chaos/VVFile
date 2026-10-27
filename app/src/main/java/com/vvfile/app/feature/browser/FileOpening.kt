@@ -3,6 +3,7 @@ package com.vvfile.app.feature.browser
 import com.vvfile.app.core.format.MimeTypes
 import com.vvfile.app.feature.archive.ArchiveFormats
 import com.vvfile.app.feature.media.MediaFormats
+import java.io.File
 
 /**
  * 单击一个文件时该不该直接弹「打开方式」。
@@ -17,7 +18,8 @@ object FileOpening {
 
     /** 有默认打开方式（内置或按扩展名直达）返回 true。 */
     fun hasKnownOpener(path: String): Boolean =
-        ArchiveFormats.isArchive(path) ||
+        // 压缩包按「扩展名 + 文件头」判：自解压 `.exe` 只有看字节才认得出来
+        ArchiveFormats.isArchive(File(path)) ||
             MimeTypes.isText(path) ||
             MediaFormats.kindOf(path) != null
 

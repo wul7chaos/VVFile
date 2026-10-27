@@ -111,6 +111,7 @@ import com.vvfile.app.R
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.data.model.FileEntry
+import com.vvfile.app.feature.archive.ArchiveFormats
 import com.vvfile.app.feature.archive.ArchivePasswordDialog
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
@@ -211,7 +212,7 @@ fun BrowserScreen(
     val selectionActive = activePane.selectionMode
     val activeSelectedEntries = activePane.entries.filter { it.path in activePane.selected }
     val singleSelected = activeSelectedEntries.singleOrNull()
-    val canUnzip = singleSelected != null && !singleSelected.isDirectory && singleSelected.extension == "zip"
+    val canUnzip = singleSelected != null && !singleSelected.isDirectory && ArchiveFormats.canExtract(singleSelected.path)
     val defaultFolderName = stringResource(R.string.ui_ops_default_folder)
     val defaultFileName = stringResource(R.string.ui_ops_default_file)
     val defaultZipName = stringResource(R.string.ui_ops_zip_default_multi)

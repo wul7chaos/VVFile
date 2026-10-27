@@ -23,7 +23,7 @@ One pane for folders, one for files. The pane you touch becomes the active pane.
 **File operations**
 
 - Copy, move, delete, rename, batch rename, new folder / new file
-- Zip and unzip (zip / 7z); browse inside an archive without extracting first, and open password-protected archives with a password prompt
+- Zip and unzip (zip / 7z / rar, including self-extracting exe); browse inside an archive without extracting first, and open password-protected archives with a password prompt
 - Properties for a single item or a multi-selection
 - Permission editor: 9-cell rwx grid, real permissions for shell scripts
 - Share, open with

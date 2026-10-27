@@ -1,6 +1,7 @@
 package com.vvfile.app.feature.archive
 
 import com.vvfile.app.core.archive.ArchivePasswordException
+import com.vvfile.app.core.archive.RarArchive
 import com.vvfile.app.core.archive.SevenZipArchive
 import com.vvfile.app.core.archive.ZipCentralDirectory
 import com.vvfile.app.core.archive.ZipEntryReader
@@ -33,14 +34,14 @@ object ArchiveIndex {
     /**
      * 读整个条目表；损坏/不存在时抛异常，交给调用方显示错误态。
      *
-     * [password] 只有 7z 的「加密文件头」需要——ZIP 的条目名永远不加密，
-     * 所以 ZIP 分支用不上它。
+     * [password] 只有加密文件头需要——7z 的 `-mhe`、RAR 的 `-hp` 才会连列表都挡住。
      */
-    fun read(path: String, password: String? = null): List<ArchiveEntryInfo> =
-        when (ArchiveFormats.kindOf(path)) {
-            ArchiveKind.TAR -> TarReader.read(File(path), gzipped = false)
-            ArchiveKind.TAR_GZ -> TarReader.read(File(path), gzipped = true)
-            ArchiveKind.SEVEN_Z -> SevenZipArchive.list(File(path), password).map { entry ->
+    fun read(path: String, password: String? = null): List<ArchiveEntryInfo> {
+        val file = File(path)
+        return when (ArchiveFormats.of(file)) {
+            ArchiveKind.TAR -> TarReader.read(file, gzipped = false)
+            ArchiveKind.TAR_GZ -> TarReader.read(file, gzipped = true)
+            ArchiveKind.SEVEN_Z -> SevenZipArchive.list(file, password).map { entry ->
                 ArchiveEntryInfo(
                     name = entry.name,
                     isDirectory = entry.isDirectory,
@@ -48,44 +49,47 @@ object ArchiveIndex {
                     modifiedAt = entry.modifiedAt,
                 )
             }
-            // ZIP 以及「扩展名不认识」的情况都交给 ZipFile：读不动时由它抛错
+            ArchiveKind.RAR -> RarArchive.list(file, password).map { entry ->
+                ArchiveEntryInfo(
+                    name = entry.name,
+                    isDirectory = entry.isDirectory,
+                    size = entry.size,
+                    modifiedAt = entry.modifiedAt,
+                    encrypted = entry.encrypted,
+                )
+            }
+            // ZIP 以及「扩展名不认识、但确实是 ZIP」的情况（自解压 .exe）
             ArchiveKind.ZIP, null -> readZip(path)
         }
+    }
 
     private fun readZip(path: String): List<ArchiveEntryInfo> {
         val file = File(path)
         // 中央目录自己读一遍：java.util.zip 不暴露加密位，Android 14+ 的 ZipFile
-        // 甚至拒绝打开带加密条目的包（invalid CEN header）
+        // 甚至拒绝打开带加密条目的包（invalid CEN header）。
+        // 它还能纠正自解压包的偏移，所以**只要读得出来就用它**，不再多走一遍 ZipFile
         val central = ZipCentralDirectory.read(file)
-        val encrypted = central.orEmpty().filter { it.encrypted }.map { it.name }.toSet()
-        return try {
-            ZipFile(file).use { zip ->
-                zip.entries().asSequence().map { entry ->
-                    ArchiveEntryInfo(
-                        name = entry.name,
-                        isDirectory = entry.isDirectory || entry.name.endsWith("/"),
-                        size = entry.size.coerceAtLeast(0L),
-                        modifiedAt = entry.time.coerceAtLeast(0L),
-                        encrypted = entry.name in encrypted,
-                    )
-                }.toList()
+        if (!central.isNullOrEmpty()) {
+            return central.map { entry ->
+                ArchiveEntryInfo(
+                    name = entry.name,
+                    isDirectory = entry.isDirectory,
+                    size = entry.size,
+                    modifiedAt = entry.modifiedAt,
+                    encrypted = entry.encrypted,
+                )
             }
-        } catch (error: Exception) {
-            // 带密码的包在 Android 14+ 上根本打不开，用中央目录顶上：
-            // 至少能看到包内结构和每项的加密标记
-            if (!central.isNullOrEmpty() && encrypted.isNotEmpty()) {
-                central.map { entry ->
-                    ArchiveEntryInfo(
-                        name = entry.name,
-                        isDirectory = entry.isDirectory,
-                        size = entry.size,
-                        modifiedAt = entry.modifiedAt,
-                        encrypted = entry.encrypted,
-                    )
-                }
-            } else {
-                throw error
-            }
+        }
+        // Zip64 / 结构不标准：交给 java.util.zip，读不动时由它抛错
+        return ZipFile(file).use { zip ->
+            zip.entries().asSequence().map { entry ->
+                ArchiveEntryInfo(
+                    name = entry.name,
+                    isDirectory = entry.isDirectory || entry.name.endsWith("/"),
+                    size = entry.size.coerceAtLeast(0L),
+                    modifiedAt = entry.time.coerceAtLeast(0L),
+                )
+            }.toList()
         }
     }
 
@@ -145,16 +149,20 @@ object ArchiveIndex {
         val safeName = entryName.trimEnd('/').substringAfterLast('/').takeIf { it.isNotBlank() } ?: return null
         if (!targetDir.exists() && !targetDir.mkdirs()) return null
         val target = File(targetDir, sanitize(safeName))
+        val file = File(path)
         return try {
-            val ok = when (ArchiveFormats.kindOf(path)) {
+            val ok = when (ArchiveFormats.of(file)) {
                 ArchiveKind.TAR -> TarReader.extract(
-                    File(path), gzipped = false, entryName = entryName, target = target,
+                    file, gzipped = false, entryName = entryName, target = target,
                 )
                 ArchiveKind.TAR_GZ -> TarReader.extract(
-                    File(path), gzipped = true, entryName = entryName, target = target,
+                    file, gzipped = true, entryName = entryName, target = target,
                 )
                 ArchiveKind.SEVEN_Z -> SevenZipArchive.extract(
-                    File(path), entryName = entryName, target = target, password = password,
+                    file, entryName = entryName, target = target, password = password,
+                )
+                ArchiveKind.RAR -> RarArchive.extract(
+                    file, entryName = entryName, target = target, password = password,
                 )
                 ArchiveKind.ZIP, null -> extractZip(path, entryName, target, password)
             }

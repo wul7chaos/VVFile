@@ -76,10 +76,13 @@ object ZipCentralDirectory {
             if (entryCount == 0xFFFF || centralSize == 0xFFFFFFFFL || centralOffset == 0xFFFFFFFFL) {
                 return null
             }
-            if (centralOffset + centralSize > file.length()) return null
+            // 自解压包：中央目录里的偏移都相对「归档体」，前面还挂着一截 stub。
+            // 用 EOCD 反推真实位置，得到这段前缀长度；不改偏移会读到 stub 里的一堆垃圾
+            val delta = (eocdOffset - centralSize) - centralOffset
+            if (delta < 0 || centralOffset + delta + centralSize > file.length()) return null
 
             val entries = mutableListOf<ZipCdEntry>()
-            raf.seek(centralOffset)
+            raf.seek(centralOffset + delta)
             repeat(entryCount) {
                 if (readU32(raf) != CENTRAL_SIGNATURE.toLong()) return entries
                 raf.skipBytes(4) // version made by / version needed
@@ -114,7 +117,7 @@ object ZipCentralDirectory {
                     flags = flags,
                     crc32 = crc,
                     compressedSize = compressedSize,
-                    localHeaderOffset = localOffset,
+                    localHeaderOffset = localOffset + delta,
                     aes = parseAesExtra(extraBytes),
                 )
             }

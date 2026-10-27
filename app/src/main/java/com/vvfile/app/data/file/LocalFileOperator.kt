@@ -1,6 +1,8 @@
 package com.vvfile.app.data.file
 
 import com.vvfile.app.core.archive.ArchivePasswordException
+import com.vvfile.app.core.archive.ArchiveSignature
+import com.vvfile.app.core.archive.RarArchive
 import com.vvfile.app.core.archive.SevenZipArchive
 import com.vvfile.app.core.archive.ZipCentralDirectory
 import com.vvfile.app.core.archive.ZipEntryReader
@@ -213,23 +215,29 @@ class LocalFileOperator(
         }
     }
 
-    /** 包里所有文件条目名；ZIP 优先读中央目录（加密包 `ZipFile` 打不开），7z 读容器头。 */
-    private fun archiveNames(archive: java.io.File, password: String?): List<String> {
-        if (isSevenZip(archive)) {
-            return SevenZipArchive.list(archive, password).filter { !it.isDirectory }.map { it.name }
+    /**
+     * 包里所有文件条目名。
+     *
+     * 类型按字节判定：ZIP 读中央目录（加密包 `ZipFile` 打不开），7z / RAR 读各自的容器头，
+     * 自解压 `.exe` 也走这里，扩展名不参与判断。
+     */
+    private fun archiveNames(archive: java.io.File, password: String?): List<String> =
+        when (ArchiveSignature.of(archive)) {
+            ArchiveSignature.Container.SEVEN_Z ->
+                SevenZipArchive.list(archive, password).filter { !it.isDirectory }.map { it.name }
+            ArchiveSignature.Container.RAR ->
+                RarArchive.list(archive, password).filter { !it.isDirectory }.map { it.name }
+            ArchiveSignature.Container.ZIP, null -> {
+                val central = ZipCentralDirectory.read(archive)
+                if (central != null) {
+                    central.filter { !it.isDirectory }.map { it.name }
+                } else {
+                    ZipFile(archive).use { zip ->
+                        zip.entries().asSequence().filter { !it.isDirectory }.map { it.name }.toList()
+                    }
+                }
+            }
         }
-        ZipCentralDirectory.read(archive)?.let { entries ->
-            return entries.filter { !it.isDirectory }.map { it.name }
-        }
-        ZipFile(archive).use { zip ->
-            return zip.entries().asSequence().filter { !it.isDirectory }.map { it.name }.toList()
-        }
-    }
-
-    /** 扩展名不可信，先看头签名（`37 7A BC AF 27 1C`），再兜底认后缀。 */
-    private fun isSevenZip(file: java.io.File): Boolean =
-        file.name.lowercase().endsWith(".7z") || SevenZipArchive.matches(file)
-
     // ---------------------------------------------------------------- transfer --
 
     private fun transferFlow(
@@ -548,10 +556,11 @@ class LocalFileOperator(
         val root = Paths.get(targetDir)
         report(OperationProgress(phase = OperationPhase.PREPARING, currentName = "正在统计…"))
         return try {
-            if (isSevenZip(archive)) {
-                extractSevenZip(archive, root, policy, password, report)
-            } else {
-                extractZip(archive, root, policy, password, report)
+            // 认容器只信字节：自解压 .exe 的扩展名说明不了任何问题
+            when (ArchiveSignature.of(archive)) {
+                ArchiveSignature.Container.SEVEN_Z -> extractSevenZip(archive, root, policy, password, report)
+                ArchiveSignature.Container.RAR -> extractRar(archive, root, policy, password, report)
+                ArchiveSignature.Container.ZIP, null -> extractZip(archive, root, policy, password, report)
             }
         } catch (wrong: ArchivePasswordException) {
             OperationResult(failures = listOf(OperationFailure(zipPath, wrong.message ?: "密码不正确")))
@@ -595,7 +604,7 @@ class LocalFileOperator(
                     isDirectory = entry.isDirectory,
                     policy = policy,
                     tracker = tracker,
-                    open = { ZipEntryReader.open(archive, entry, password) },
+                    write = { output -> ZipEntryReader.open(archive, entry, password).use { it.copyTo(output) } },
                     succeeded = succeeded,
                     skipped = skipped,
                     failures = failures,
@@ -633,7 +642,7 @@ class LocalFileOperator(
                     isDirectory = entry.isDirectory,
                     policy = policy,
                     tracker = tracker,
-                    open = { zip.getInputStream(entry) },
+                    write = { output -> zip.getInputStream(entry).use { it.copyTo(output) } },
                     succeeded = succeeded,
                     skipped = skipped,
                     failures = failures,
@@ -671,7 +680,7 @@ class LocalFileOperator(
                         isDirectory = entry.isDirectory,
                         policy = policy,
                         tracker = tracker,
-                        open = { session.open(entry.name) },
+                        write = { output -> session.open(entry.name).use { it.copyTo(output) } },
                         succeeded = succeeded,
                         skipped = skipped,
                         failures = failures,
@@ -685,9 +694,58 @@ class LocalFileOperator(
     }
 
     /**
-     * 解一条（ZIP 与 7z 共用）：Zip Slip 校验、冲突策略、进度、失败登记都在这。
+     * RAR 解压。
      *
-     * [open] 只是在真正要写文件时才调用——被跳过的条目不会白白解开一遍。
+     * junrar 只能「把条目写进一个 OutputStream」，所以这里包一层计数流：
+     * 进度按字节走，同时借写操作做协程取消检查（大包中途可以停）。
+     */
+    private suspend fun extractRar(
+        archive: java.io.File,
+        root: Path,
+        policy: ConflictPolicy,
+        password: String?,
+        report: suspend (OperationProgress) -> Unit,
+    ): OperationResult {
+        val succeeded = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
+        val failures = mutableListOf<OperationFailure>()
+        RarArchive.open(archive, password).use { session ->
+            val entries = session.entries
+            val tracker = ProgressTracker(
+                totalBytes = entries.sumOf { if (it.isDirectory) 0L else it.size },
+                totalItems = entries.size,
+                report = report,
+            )
+            Files.createDirectories(root)
+            try {
+                for (entry in entries) {
+                    coroutineContext.ensureActive()
+                    extractEntry(
+                        root = root,
+                        name = entry.name,
+                        isDirectory = entry.isDirectory,
+                        policy = policy,
+                        tracker = tracker,
+                        write = { output ->
+                            val context = kotlin.coroutines.coroutineContext
+                            session.extractTo(entry.name, ProgressOutputStream(output, tracker, context))
+                        },
+                        succeeded = succeeded,
+                        skipped = skipped,
+                        failures = failures,
+                    )
+                }
+            } catch (wrong: ArchivePasswordException) {
+                failures += OperationFailure(archive.path, wrong.message ?: "密码不正确")
+            }
+        }
+        return OperationResult(succeeded, skipped = skipped, failures = failures)
+    }
+
+    /**
+     * 解一条（ZIP / 7z / RAR 共用）：Zip Slip 校验、冲突策略、失败登记都在这。
+     *
+     * [write] 只在真正要写文件时才调用——被跳过的条目不会白白解开一遍。
      */
     private suspend fun extractEntry(
         root: Path,
@@ -695,7 +753,7 @@ class LocalFileOperator(
         isDirectory: Boolean,
         policy: ConflictPolicy,
         tracker: ProgressTracker,
-        open: () -> InputStream,
+        write: suspend (OutputStream) -> Unit,
         succeeded: MutableList<String>,
         skipped: MutableList<String>,
         failures: MutableList<OperationFailure>,
@@ -737,16 +795,12 @@ class LocalFileOperator(
         }
         try {
             out.parent?.let { Files.createDirectories(it) }
-            open().use { input ->
-                Files.newOutputStream(
-                    out,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE,
-                ).use { output ->
-                    copyStream(input, output, name, tracker)
-                }
-            }
+            Files.newOutputStream(
+                out,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE,
+            ).use { output -> write(output) }
             succeeded += out.toString()
         } catch (cancel: CancellationException) {
             throw cancel
@@ -757,6 +811,34 @@ class LocalFileOperator(
             failures += OperationFailure(name, error.userMessage())
         }
         tracker.completeItem(name)
+    }
+
+    /** 计数 + 取消检查的输出流：给只会「往流里写」的解压器（RAR）用。 */
+    private class ProgressOutputStream(
+        private val target: OutputStream,
+        private val tracker: ProgressTracker,
+        private val context: kotlin.coroutines.CoroutineContext,
+    ) : OutputStream() {
+
+        override fun write(b: Int) {
+            context.ensureActive()
+            target.write(b)
+            tracker.addBytes(1)
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            context.ensureActive()
+            target.write(b, off, len)
+            tracker.addBytes(len.toLong())
+        }
+
+        override fun flush() {
+            target.flush()
+        }
+
+        override fun close() {
+            target.close()
+        }
     }
 
     // ----------------------------------------------------------------- helpers --
