@@ -2,6 +2,7 @@ package com.vvfile.app.feature.browser
 import androidx.compose.ui.graphics.RectangleShape
 
 import android.os.Build
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -31,13 +32,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vvfile.app.BuildConfig
+import com.vvfile.app.R
 import com.vvfile.app.ui.components.StorageCard
 
 /** 抽屉宽度；「点右侧空白关闭」的区域起点要跟它对齐。 */
@@ -70,27 +72,12 @@ fun DrawerContent(
                     .padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RectangleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.secondary,
-                                ),
-                            ),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "VV",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                    )
-                }
+                // 和应用图标同一张图，抽屉里不再自己画一个「VV」方块
+                Image(
+                    painter = painterResource(R.drawable.vvfile_app_icon),
+                    contentDescription = null,
+                    modifier = Modifier.size(44.dp),
+                )
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
