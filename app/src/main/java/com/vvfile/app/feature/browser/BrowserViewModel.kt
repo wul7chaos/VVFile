@@ -41,6 +41,14 @@ class BrowserViewModel : ViewModel() {
     private val _state = MutableStateFlow(BrowserUiState())
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
 
+    /**
+     * 每个窗格每个目录的上次落点。
+     *
+     * 放 ViewModel 而不是 remember：转屏、进编辑器再返回时 Activity 会重建/离场，
+     * 滚动位置该留着；这里不是 Compose 状态，写进去不会引起重组。
+     */
+    val scroll = ScrollMemory()
+
     private val loadJobs = mutableMapOf<PaneId, Job>()
     private var operationJob: Job? = null
     private var pendingTransfer: PendingTransfer? = null

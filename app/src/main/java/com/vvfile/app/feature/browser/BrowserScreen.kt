@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -159,21 +160,25 @@ fun BrowserScreen(
     var aggregate by remember { mutableStateOf<AggregateProperties?>(null) }
     var chmodRequest by remember { mutableStateOf<ChmodRequest?>(null) }
 
-    // 每个窗格一份滚动状态；路径变化时回到顶部（requestScrollToItem 在列表尚未布局时也生效）
+    // 每个窗格一份滚动状态；访问过的目录记下落点，回来时滚回原来的行，
+    // 没访问过的目录才回到顶部
     val leftListState = rememberLazyListState()
     val rightListState = rememberLazyListState()
-    LaunchedEffect(state.left.path) { leftListState.requestScrollToItem(0) }
-    LaunchedEffect(state.right.path) { rightListState.requestScrollToItem(0) }
-    // 排序变化后两窗格都回到顶部，避免新排序下首行被裁成半截
+    TrackPaneScroll(PaneId.LEFT, state.left, leftListState, viewModel.scroll)
+    TrackPaneScroll(PaneId.RIGHT, state.right, rightListState, viewModel.scroll)
+    // 排序变化后两窗格都回到顶部，避免新排序下首行被裁成半截；旧落点也已经对不上人
     LaunchedEffect(state.sort) {
+        viewModel.scroll.clear()
         leftListState.requestScrollToItem(0)
         rightListState.requestScrollToItem(0)
     }
-    // 过滤条件变化后回到顶部，避免沿用旧索引显示到列表中部
+    // 过滤条件变化后回到顶部，避免沿用旧索引显示到列表中部；该窗格的落点一并作废
     LaunchedEffect(state.left.filterQuery, state.left.filterExtensions) {
+        viewModel.scroll.clearPane(PaneId.LEFT)
         leftListState.requestScrollToItem(0)
     }
     LaunchedEffect(state.right.filterQuery, state.right.filterExtensions) {
+        viewModel.scroll.clearPane(PaneId.RIGHT)
         rightListState.requestScrollToItem(0)
     }
 
@@ -1759,6 +1764,48 @@ private fun openAllFilesSettings(context: Context) {
                 ),
             )
         }
+    }
+}
+
+/**
+ * 让单个窗格记住每个目录停在哪儿：离开时存下首行索引，回来且条目加载完后滚回去。
+ *
+ * 存点在 [DisposableEffect] 的 onDispose 里做，不是监听滚动——离开那一刻列表还没被
+ * 新目录的空列表重置，读到的才是用户真正停留的位置；换成滚动监听的话，
+ * 切目录时列表先变空，`onDispose` 之前就可能把 0 写进旧目录的记录里。
+ *
+ * 恢复只做一次（[restored] 记住是哪个目录恢复过）：之后同一目录的刷新、复制完成后的
+ * 列表重载都会改变条目数，不该把用户又拽回原来的行。
+ */
+@Composable
+private fun TrackPaneScroll(
+    pane: PaneId,
+    paneState: PaneState,
+    listState: LazyListState,
+    memory: ScrollMemory,
+) {
+    val path = paneState.path
+    DisposableEffect(pane, path) {
+        onDispose {
+            memory.remember(
+                pane = pane,
+                path = path,
+                index = listState.firstVisibleItemIndex,
+                offset = listState.firstVisibleItemScrollOffset,
+            )
+        }
+    }
+
+    var restored by remember(pane) { mutableStateOf<String?>(null) }
+    val entries = paneState.visibleEntries
+    LaunchedEffect(pane, path, paneState.loading, entries.size) {
+        if (paneState.loading || entries.isEmpty() || restored == path) return@LaunchedEffect
+        restored = path
+        val saved = memory.position(pane, path)
+        val index = (saved?.index ?: 0).coerceIn(0, entries.lastIndex)
+        // 落点被夹到别的行（目录内容变短）时不能再带偏移，否则首行会被裁掉半截
+        val offset = if (saved != null && saved.index == index) saved.offset else 0
+        listState.scrollToItem(index, offset)
     }
 }
 
