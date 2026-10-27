@@ -42,6 +42,7 @@ import com.vvfile.app.data.prefs.Settings
 import com.vvfile.app.data.prefs.ThemeMode
 import com.vvfile.app.feature.apps.AppListScreen
 import com.vvfile.app.feature.archive.ArchiveScreen
+import com.vvfile.app.feature.browser.BuiltinOpener
 import com.vvfile.app.feature.browser.BrowserScreen
 import com.vvfile.app.feature.editor.EditorScreen
 import com.vvfile.app.feature.media.AudioEngine
@@ -170,6 +171,33 @@ class MainActivity : ComponentActivity() {
                 }
 
                 /**
+                 * 「打开方式」里指定了内置打开器：不按扩展名猜，直接进对应的查看器。
+                 *
+                 * 扩展名对不上也照开——把一个 .bin 交给文本编辑器看看到底是不是文本，
+                 * 是这类「强制打开」的典型用法。
+                 */
+                fun openAs(path: String, opener: BuiltinOpener) {
+                    when (opener) {
+                        BuiltinOpener.TEXT -> editingPath = path
+                        BuiltinOpener.IMAGE -> openReadOnly(path) { ready -> imagePath = ready }
+                        BuiltinOpener.AUDIO -> {
+                            ensureNotificationPermission()
+                            openReadOnly(path) { ready ->
+                                audioPath = ready
+                                audioMinimized = false
+                            }
+                        }
+                        BuiltinOpener.VIDEO -> {
+                            if (AudioEngine.state.value.playing) {
+                                AudioEngine.togglePlayPause()
+                            }
+                            openReadOnly(path) { ready -> videoPath = ready }
+                        }
+                        BuiltinOpener.ARCHIVE -> openReadOnly(path) { ready -> archivePath = ready }
+                    }
+                }
+
+                /**
                  * 按类型打开一个真实路径：音视频/图片进内置播放器，文本进编辑器，
                  * 其余交给系统。压缩包浏览里解出来的临时文件也走这里。
                  */
@@ -222,6 +250,7 @@ class MainActivity : ComponentActivity() {
                         onNavigateHandled = { browseTarget = null },
                         locateFile = locatePath.value,
                         onLocateHandled = { locatePath.value = null },
+                        onOpenBuiltin = { path, opener -> openAs(path, opener) },
                         onOpenFile = { path ->
                             // 点压缩包直接进去看，而不是弹「选择打开方式」
                             if (path.endsWith(".zip", ignoreCase = true)) {

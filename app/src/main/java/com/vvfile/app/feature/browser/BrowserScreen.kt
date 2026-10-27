@@ -113,7 +113,6 @@ import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
-import com.vvfile.app.core.format.MimeTypes
 import com.vvfile.app.core.script.ScriptEnv
 import com.vvfile.app.core.script.ScriptExecutionPrefs
 import com.vvfile.app.core.script.ScriptRunResult
@@ -125,7 +124,6 @@ import com.vvfile.app.data.file.AggregatePropertyReader
 import com.vvfile.app.data.file.FileProperties
 import com.vvfile.app.data.file.FilePropertyReader
 import com.vvfile.app.data.prefs.PrefsRepository
-import com.vvfile.app.feature.media.MediaFormats
 import com.vvfile.app.data.prefs.Settings as AppSettings
 import com.vvfile.app.ui.components.PathBar
 import com.vvfile.app.ui.components.PathInputDialog
@@ -138,6 +136,8 @@ import kotlinx.coroutines.launch
 fun BrowserScreen(
     viewModel: BrowserViewModel = viewModel(),
     onOpenFile: ((String) -> Unit)? = null,
+    /** 「打开方式」里选了某个内置打开器：强制按这种方式打开，不再按扩展名猜。 */
+    onOpenBuiltin: ((String, BuiltinOpener) -> Unit)? = null,
     onToolClick: ((String) -> Unit)? = null,
     /** 外部（如应用信息弹窗）请求跳转的路径；消费后回调 [onNavigateHandled]。 */
     navigateTo: String? = null,
@@ -623,16 +623,11 @@ fun BrowserScreen(
         OpenWithDialog(
             path = entry.path,
             fileName = entry.name,
-            onEditText = if (MimeTypes.isText(entry.path)) {
-                { onOpenFile?.invoke(entry.path) }
-            } else {
-                null
-            },
             onDismiss = { openWithTarget = null },
-            onOpenInternal = if (MediaFormats.isMedia(entry.path)) {
-                { onOpenFile?.invoke(entry.path) }
-            } else {
-                null
+            onOpenBuiltin = { opener ->
+                // 没有注入强制打开的回调时（例如预览场景）退回默认按扩展名路由
+                val handler = onOpenBuiltin
+                if (handler != null) handler(entry.path, opener) else onOpenFile?.invoke(entry.path)
             },
         )
     }

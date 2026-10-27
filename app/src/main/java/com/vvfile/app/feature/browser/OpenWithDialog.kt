@@ -2,8 +2,10 @@ package com.vvfile.app.feature.browser
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,14 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Movie
-import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +34,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,39 +42,23 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
 import com.vvfile.app.core.format.MimeTypes
 import com.vvfile.app.core.share.FileSharer
-import com.vvfile.app.feature.media.MediaFormats
-import com.vvfile.app.feature.media.MediaKind
 
 /**
- * 「打开方式」：内置（编辑文本 / 播放器 / 图片查看器）+ 系统里能处理该类型的应用。
+ * 「打开方式」：上半排是 VVFile 自己的打开器（强制用某一种方式打开），
+ * 下半部分是系统里能处理该类型的应用。
  *
- * 按需求不做十六进制 / xml / dex / arsc / apk / apks / 查看字体 / 导入签名 /
- * 插件信息 / .9 编辑 / jar / class / 对比结果这些内置查看器。
+ * 排成网格是为了和 MT 的操作习惯对齐：不用管扩展名，点哪个就用哪个看。
  */
 @Composable
 fun OpenWithDialog(
     path: String,
     fileName: String,
-    onEditText: (() -> Unit)?,
+    onOpenBuiltin: (BuiltinOpener) -> Unit,
     onDismiss: () -> Unit,
-    onOpenInternal: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val targets = remember(path) { FileSharer.resolveOpenWith(context, path) }
     val mime = remember(path) { MimeTypes.forPath(path) }
-    val kind = remember(path) { MediaFormats.kindOf(path) }
-    val internalLabel = when (kind) {
-        MediaKind.AUDIO -> "内置播放器"
-        MediaKind.VIDEO -> "内置视频播放器"
-        MediaKind.IMAGE -> "内置图片查看器"
-        null -> "内置查看器"
-    }
-    val internalSubtitle = when (kind) {
-        MediaKind.AUDIO -> "支持后台播放与通知栏控制"
-        MediaKind.VIDEO -> "内置视频播放，支持倍速与字幕"
-        MediaKind.IMAGE -> "支持缩放、滑动切换"
-        null -> "VVFile 内置"
-    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -84,7 +67,7 @@ fun OpenWithDialog(
             tonalElevation = 6.dp,
             modifier = Modifier.fillMaxWidth(0.94f),
         ) {
-            Column(Modifier.heightIn(max = 520.dp)) {
+            Column(Modifier.heightIn(max = 560.dp)) {
                 Text(
                     text = "打开方式",
                     fontSize = 15.sp,
@@ -103,82 +86,78 @@ fun OpenWithDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    if (onOpenInternal != null) {
-                        OpenWithRow(
-                            label = internalLabel,
-                            subtitle = internalSubtitle,
-                            icon = {
-                                Icon(
-                                    imageVector = when (kind) {
-                                        MediaKind.AUDIO -> Icons.Outlined.MusicNote
-                                        MediaKind.VIDEO -> Icons.Outlined.Movie
-                                        MediaKind.IMAGE -> Icons.Outlined.Image
-                                        null -> Icons.Outlined.PlayCircle
-                                    },
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            },
-                            onClick = {
-                                onDismiss()
-                                onOpenInternal()
-                            },
-                        )
-                    }
-                    if (onEditText != null) {
-                        OpenWithRow(
-                            label = "编辑文本",
-                            subtitle = "内置编辑器",
-                            icon = { Icon(Icons.Outlined.Edit, null, tint = MaterialTheme.colorScheme.primary) },
-                            onClick = {
-                                onDismiss()
-                                onEditText()
-                            },
-                        )
-                    }
-                    targets.forEach { target ->
-                        OpenWithRow(
-                            label = target.label,
-                            subtitle = target.packageName,
-                            icon = {
-                                val drawable = target.icon
-                                if (drawable != null) {
-                                    Image(
-                                        bitmap = remember(target.packageName) {
-                                            drawable.toBitmap(
-                                                width = 96,
-                                                height = 96,
-                                            ).asImageBitmap()
+                    // 内置打开器：固定五项，点哪个就强制用哪个，扩展名对不上也照开
+                    Column(Modifier.padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 4.dp)) {
+                        BuiltinOpener.entries.chunked(BUILTIN_COLUMNS).forEach { row ->
+                            Row(Modifier.fillMaxWidth()) {
+                                row.forEach { opener ->
+                                    BuiltinOpenerTile(
+                                        opener = opener,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = {
+                                            onDismiss()
+                                            onOpenBuiltin(opener)
                                         },
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                } else {
-                                    Icon(
-                                        Icons.AutoMirrored.Outlined.InsertDriveFile,
-                                        null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                            },
-                            onClick = {
-                                val ok = FileSharer.openWith(context, path, target.packageName)
-                                if (ok) {
-                                    onDismiss()
-                                } else {
-                                    Toast.makeText(context, "无法用 ${target.label} 打开", Toast.LENGTH_SHORT)
-                                        .show()
+                                // 末行不满时补空位，避免图标被拉宽
+                                repeat(BUILTIN_COLUMNS - row.size) {
+                                    Spacer(Modifier.weight(1f))
                                 }
-                            },
-                        )
+                            }
+                        }
                     }
-                    if (targets.isEmpty() && onEditText == null && onOpenInternal == null) {
-                        Text(
-                            text = "没有可用的打开方式（$mime）",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(16.dp),
+
+                    if (targets.isNotEmpty()) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
+                        Text(
+                            text = "其他应用",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
+                        )
+                        targets.forEach { target ->
+                            OpenWithRow(
+                                label = target.label,
+                                subtitle = target.packageName,
+                                icon = {
+                                    val drawable = target.icon
+                                    if (drawable != null) {
+                                        Image(
+                                            bitmap = remember(target.packageName) {
+                                                drawable.toBitmap(
+                                                    width = 96,
+                                                    height = 96,
+                                                ).asImageBitmap()
+                                            },
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.AutoMirrored.Outlined.InsertDriveFile,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    val ok = FileSharer.openWith(context, path, target.packageName)
+                                    if (ok) {
+                                        onDismiss()
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "无法用 ${target.label} 打开",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
 
@@ -204,6 +183,58 @@ fun OpenWithDialog(
         }
     }
 }
+
+/** 内置打开器的一格：圆角色块 + 图标 + 名称，风格对齐 MT 的插件网格。 */
+@Composable
+private fun BuiltinOpenerTile(
+    opener: BuiltinOpener,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(12.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = opener.icon,
+                contentDescription = opener.label,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(Modifier.height(5.dp))
+        Text(
+            text = opener.label,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = opener.subtitle,
+            fontSize = 9.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/** 内置打开器每行格数：五项排成 4 + 1。 */
+private const val BUILTIN_COLUMNS = 4
 
 @Composable
 private fun OpenWithRow(
