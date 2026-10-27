@@ -75,6 +75,7 @@ or offering paid services built on it). Full terms in [LICENSE.md](LICENSE.md).
 ![Dafeiyu](docs/brand/dfy.png)
 
 - Developer: **大肥鱼 (Dafeiyu)**, model `DeepSeek-v4.1-flash-1017` & **VVLing**
+- Tooling: **dsh** (DeepSeek Harness)
 - The whole codebase was written by AI; the human only gave suggestions and did acceptance checks
 - No line-by-line human review. Provided "as is"; the author takes no responsibility for
   any consequences of using it
