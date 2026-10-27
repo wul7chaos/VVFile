@@ -36,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.widget.Toast
 import kotlinx.coroutines.delay
 
 /**
@@ -71,6 +74,7 @@ fun PathInputDialog(
     }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
 
     // 输入停顿一下再查目录，避免每敲一个字符都去 list 一次
     LaunchedEffect(value.text, currentPath) {
@@ -167,6 +171,15 @@ fun PathInputDialog(
                                 }
                             },
                         ) { Text("粘贴") }
+                        TextButton(
+                            onClick = {
+                                val text = value.text.trim()
+                                if (text.isNotEmpty()) {
+                                    clipboard.setText(AnnotatedString(text))
+                                    Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        ) { Text("复制路径") }
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = onDismiss) { Text("取消") }
                         TextButton(
