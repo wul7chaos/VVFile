@@ -41,8 +41,6 @@ import com.vvfile.app.data.prefs.PrefsRepository
 import com.vvfile.app.data.prefs.Settings
 import com.vvfile.app.data.prefs.ThemeMode
 import com.vvfile.app.feature.apps.AppListScreen
-import com.vvfile.app.feature.archive.ArchiveFormats
-import com.vvfile.app.feature.archive.ArchiveScreen
 import com.vvfile.app.feature.browser.BuiltinOpener
 import com.vvfile.app.feature.browser.BrowserScreen
 import com.vvfile.app.feature.editor.EditorScreen
@@ -134,8 +132,6 @@ class MainActivity : ComponentActivity() {
                 var imagePath by rememberSaveable { mutableStateOf<String?>(null) }
                 // 「应用信息」点数据目录后带到浏览器的目标路径
                 var browseTarget by rememberSaveable { mutableStateOf<String?>(null) }
-                // 压缩包浏览：非空时整页覆盖在文件列表之上
-                var archivePath by rememberSaveable { mutableStateOf<String?>(null) }
 
                 val notificationPermission = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission(),
@@ -194,7 +190,8 @@ class MainActivity : ComponentActivity() {
                             }
                             openReadOnly(path) { ready -> videoPath = ready }
                         }
-                        BuiltinOpener.ARCHIVE -> openReadOnly(path) { ready -> archivePath = ready }
+                        // 压缩包现在在它所在的窗格里就地展开，由 BrowserScreen 处理，这里不再跳页
+                        BuiltinOpener.ARCHIVE -> Unit
                     }
                 }
 
@@ -203,12 +200,8 @@ class MainActivity : ComponentActivity() {
                  * 其余交给系统。压缩包浏览里解出来的临时文件也走这里。
                  */
                 fun openPath(path: String) {
-                    // 压缩包（zip/apk/tar/tar.gz）一律先进包内浏览：想把 APK 交给安装器、
-                    // 或交给别的应用，走长按「打开方式」
-                    if (ArchiveFormats.isArchive(File(path))) {
-                        openReadOnly(path) { ready -> archivePath = ready }
-                        return
-                    }
+                    // 压缩包不会走到这里：BrowserScreen 直接让它在所在窗格展开。
+                    // 这里只管音视频/图片/文本/其余交给系统。
                     when (MediaFormats.kindOf(path)) {
                         MediaKind.AUDIO -> {
                             ensureNotificationPermission()
@@ -245,7 +238,6 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(locatePath.value) {
                     if (locatePath.value == null) return@LaunchedEffect
                     editingPath = null
-                    archivePath = null
                     showSettings = false
                     showTerminal = false
                     showApps = false
@@ -288,14 +280,6 @@ class MainActivity : ComponentActivity() {
                         },
                     )
 
-                    archivePath?.let { path ->
-                        ArchiveScreen(
-                            archivePath = path,
-                            onClose = { archivePath = null },
-                            onOpenEntry = { extracted -> openPath(extracted) },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
 
                     editingPath?.let { path ->
                         EditorScreen(

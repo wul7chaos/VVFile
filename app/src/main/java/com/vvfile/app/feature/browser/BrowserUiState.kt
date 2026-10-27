@@ -3,10 +3,39 @@ package com.vvfile.app.feature.browser
 import com.vvfile.app.data.model.FileEntry
 import com.vvfile.app.data.model.SortSpec
 import com.vvfile.app.data.model.StorageStats
+import com.vvfile.app.feature.archive.ArchiveEntryInfo
+import com.vvfile.app.feature.archive.ArchiveIndex
 
 enum class PaneId { LEFT, RIGHT }
 
-/** 单个窗格的完整状态（路径、历史、列表、选择）。 */
+/**
+ * 窗格里的压缩包浏览状态。
+ *
+ * 压缩包不再另开界面：点哪个窗格里的包，就在那个窗格里把条目铺成列表（和目录一样逐层看），
+ * 退回包根再退一次就回到原来的目录。
+ */
+data class ArchiveView(
+    val path: String,
+    val name: String,
+    /** 条目的完整列表；null 表示还在读。 */
+    val entries: List<ArchiveEntryInfo>? = null,
+    /** 包内当前目录，空串是包根。 */
+    val currentDir: String = "",
+    val loading: Boolean = true,
+    val error: String? = null,
+    /** 密码已经验证过（7z `-mhe` / RAR `-hp`）。 */
+    val unlocked: Boolean = false,
+    /** 正在解出的条目名；非空时列表顶部显示细进度线。 */
+    val extracting: String? = null,
+) {
+    /** 当前这一层的条目（目录在前，文件在后）。 */
+    val visibleEntries: List<ArchiveEntryInfo>
+        get() = entries?.let { ArchiveIndex.children(it, currentDir) }.orEmpty()
+
+    val canGoUp: Boolean get() = currentDir.isNotEmpty()
+}
+
+/** 窗格状态。 */
 data class PaneState(
     val path: String = "",
     val entries: List<FileEntry> = emptyList(),
@@ -22,6 +51,8 @@ data class PaneState(
     val filterQuery: String = "",
     /** 扩展名过滤，逗号/空格分隔；空表示不过滤。 */
     val filterExtensions: String = "",
+    /** 非空表示这个窗格正在浏览压缩包，列表显示的是包内条目。 */
+    val archive: ArchiveView? = null,
 ) {
     val canGoBack: Boolean get() = historyIndex > 0
     val canGoForward: Boolean get() = historyIndex in 0 until history.lastIndex
@@ -62,6 +93,8 @@ data class BrowserUiState(
     val conflictPrompt: ConflictPrompt? = null,
     /** 解压加密压缩包时等待密码。 */
     val zipPasswordPrompt: ZipPasswordPrompt? = null,
+    /** 窗格里打开压缩包时等待密码（读列表或解某一条）。 */
+    val archivePrompt: ArchivePromptState? = null,
     /** 一次性提示（操作摘要/校验失败），UI 展示后调用 consumeMessage()。 */
     val message: UiMessage? = null,
 )
@@ -93,6 +126,20 @@ data class ZipPasswordPrompt(
     val zipPath: String,
     val targetDir: String,
     val wrong: Boolean = false,
+)
+
+/**
+ * 窗格里打开压缩包时的密码请求。
+ *
+ * [entryName] 为空表示连条目列表都读不出来（7z `-mhe` / RAR `-hp`）；
+ * 非空表示只挡解这一条。两种都留在弹窗里重试，[error] 就是「密码不正确」。
+ */
+data class ArchivePromptState(
+    val pane: PaneId,
+    val archivePath: String,
+    val fileName: String,
+    val entryName: String? = null,
+    val error: String? = null,
 )
 
 /** 操作结束后交给 UI 的一次性反馈。Simple 用于校验/提示类文案。 */

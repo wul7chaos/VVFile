@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.vvfile.app.R
 import com.vvfile.app.data.model.FileEntry
+import com.vvfile.app.feature.archive.ArchiveEntryInfo
 import com.vvfile.app.ui.components.FileRow
 import kotlin.math.abs
 
@@ -82,8 +83,26 @@ fun PaneContent(
     onNewFolder: () -> Unit,
     onPullRefresh: () -> Unit,
     showDetails: Boolean = false,
+    /** 这个窗格在浏览压缩包时点条目（目录进下一层，文件解出来再打开）。 */
+    onArchiveEntry: (ArchiveEntryInfo) -> Unit = {},
+    /** 压缩包读失败后的「重试」。 */
+    onArchiveRetry: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    // 压缩包在这个窗格里就地展开：布局和目录列表一致，数据来源换一套
+    pane.archive?.let { archive ->
+        ArchivePaneView(
+            archive = archive,
+            active = active,
+            showDetails = showDetails,
+            onActivate = onActivate,
+            onEntryClick = onArchiveEntry,
+            onRetry = onArchiveRetry,
+            modifier = modifier,
+        )
+        return
+    }
+
     val accent = MaterialTheme.colorScheme.primary
     val visibleEntries = pane.visibleEntries
     Column(

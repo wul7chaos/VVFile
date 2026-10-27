@@ -108,6 +108,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.vvfile.app.BuildConfig
 import com.vvfile.app.R
+import com.vvfile.app.core.io.RootStaging
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.data.model.FileEntry
@@ -119,6 +120,7 @@ import com.vvfile.app.core.script.ScriptEnv
 import com.vvfile.app.core.script.ScriptExecutionPrefs
 import com.vvfile.app.core.script.ScriptRunResult
 import com.vvfile.app.core.script.ScriptRunner
+import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.core.shell.RootManager
 import com.vvfile.app.core.share.FileSharer
 import com.vvfile.app.data.file.AggregateProperties
@@ -132,7 +134,9 @@ import com.vvfile.app.ui.components.PathInputDialog
 import com.vvfile.app.ui.theme.VVDanger
 import com.vvfile.app.ui.theme.VVWarn
 import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun BrowserScreen(
@@ -325,14 +329,40 @@ fun BrowserScreen(
     // 返回键 / 全面屏侧滑：选择态 → 抽屉 → 上一层目录。
     // 已经在根目录时**什么都不做**：以前这里不拦，一滑就把应用退回桌面，误触成本太高。
     val canNavigateUp = remember(activePane.path) { File(activePane.path).parent != null }
+    // 压缩包里：先退包内目录，到包根再退一次就回原来的目录
+    val activeArchive = activePane.archive
     BackHandler(enabled = true) {
         when {
             selectionActive -> viewModel.clearSelection(state.active)
             drawerState.isOpen -> scope.launch { drawerState.close() }
+            activeArchive != null -> {
+                if (!viewModel.archiveUp(state.active)) viewModel.closeArchive(state.active)
+            }
             canNavigateUp -> viewModel.navigateUp(state.active)
             else -> Unit
         }
     }
+
+    /**
+     * 压缩包一律在**它所在的窗格**里展开：左窗格的包留在左窗格，右窗格同理，
+     * 不再整页盖住浏览器（另一边还能照常干活）。
+     *
+     * root-only 目录里的包先落一份到缓存：解析器只认路径，不会用 su。
+     */
+    val archiveStaging = remember { RootStaging() }
+    val openArchiveInPane: (PaneId, String) -> Unit = { paneId, path ->
+        val readable = runCatching { File(path).canRead() }.getOrDefault(false)
+        if (readable || !RootAccess.allowed()) {
+            viewModel.openArchive(paneId, path)
+        } else {
+            scope.launch {
+                val staged = withContext(Dispatchers.IO) { archiveStaging.stage(path) }
+                viewModel.openArchive(paneId, staged?.absolutePath ?: path)
+            }
+        }
+    }
+    /** 包内条目解出来的落地目录，和之前整页浏览用的是同一个。 */
+    val archiveCacheDir = remember { File(context.cacheDir, "archive").absolutePath }
 
     Box(Modifier.fillMaxSize()) {
     ModalNavigationDrawer(
@@ -394,17 +424,21 @@ fun BrowserScreen(
                 onEditPath = { showPathInput = true },
                 onSort = viewModel::setSort,
                 onFilter = { showFilter = true },
-                onRefresh = { viewModel.refresh(state.active) },
+                onRefresh = {
+                    if (activePane.archive != null) viewModel.reloadArchive(state.active) else viewModel.refresh(state.active)
+                },
             )
 
+
             /**
-             * 单击文件：脚本先问怎么执行；**没有已知打开方式的文件直接弹「打开方式」面板**
-             * （以前是默默交给系统，可能什么都不发生）；其余交给外层按扩展名路由。
+             * 单击文件：脚本先问怎么执行；压缩包在所在窗格里就地展开；
+             * **没有已知打开方式的文件直接弹「打开方式」面板**；其余交给外层按扩展名路由。
              */
             val openEntry: (PaneId, FileEntry) -> Unit = { paneId, entry ->
                 viewModel.setActive(paneId)
                 when {
                     entry.isScript -> openScript(entry)
+                    ArchiveFormats.isArchive(File(entry.path)) -> openArchiveInPane(paneId, entry.path)
                     FileOpening.needsChooser(entry.path) -> openWithTarget = entry
                     onOpenFile != null -> onOpenFile(entry.path)
                     else -> Toast.makeText(
@@ -435,6 +469,12 @@ fun BrowserScreen(
                         nameDialog = NameDialogState(NameDialogMode.NEW_FOLDER, defaultFolderName)
                     },
                     onPullRefresh = { viewModel.refresh(PaneId.LEFT) },
+                    onArchiveEntry = { entry ->
+                        viewModel.archiveTap(PaneId.LEFT, entry, archiveCacheDir) { ready ->
+                            onOpenFile?.invoke(ready)
+                        }
+                    },
+                    onArchiveRetry = { viewModel.reloadArchive(PaneId.LEFT) },
                     modifier = Modifier.weight(1f),
                 )
                 run {
@@ -463,6 +503,12 @@ fun BrowserScreen(
                             nameDialog = NameDialogState(NameDialogMode.NEW_FOLDER, defaultFolderName)
                         },
                         onPullRefresh = { viewModel.refresh(PaneId.RIGHT) },
+                        onArchiveEntry = { entry ->
+                            viewModel.archiveTap(PaneId.RIGHT, entry, archiveCacheDir) { ready ->
+                                onOpenFile?.invoke(ready)
+                            }
+                        },
+                        onArchiveRetry = { viewModel.reloadArchive(PaneId.RIGHT) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -505,7 +551,13 @@ fun BrowserScreen(
             } else {
                 BrowserBottomBar(
                     pane = activePane,
-                    onBack = { viewModel.goBack(state.active) },
+                    onBack = {
+                        if (activePane.archive != null) {
+                            if (!viewModel.archiveUp(state.active)) viewModel.closeArchive(state.active)
+                        } else {
+                            viewModel.goBack(state.active)
+                        }
+                    },
                     onForward = { viewModel.goForward(state.active) },
                     onNewFolder = {
                         nameDialog = NameDialogState(NameDialogMode.NEW_FOLDER, defaultFolderName)
@@ -514,7 +566,13 @@ fun BrowserScreen(
                         nameDialog = NameDialogState(NameDialogMode.NEW_FILE, defaultFileName)
                     },
                     onSync = viewModel::syncOtherPane,
-                    onUp = { viewModel.navigateUp(state.active) },
+                    onUp = {
+                        if (activePane.archive != null) {
+                            if (!viewModel.archiveUp(state.active)) viewModel.closeArchive(state.active)
+                        } else {
+                            viewModel.navigateUp(state.active)
+                        }
+                    },
                 )
             }
         }
@@ -627,9 +685,14 @@ fun BrowserScreen(
             fileName = entry.name,
             onDismiss = { openWithTarget = null },
             onOpenBuiltin = { opener ->
-                // 没有注入强制打开的回调时（例如预览场景）退回默认按扩展名路由
-                val handler = onOpenBuiltin
-                if (handler != null) handler(entry.path, opener) else onOpenFile?.invoke(entry.path)
+                if (opener == BuiltinOpener.ARCHIVE) {
+                    // 「按压缩包打开」也在文件所在窗格里展开，不再跳整页
+                    openArchiveInPane(state.active, entry.path)
+                } else {
+                    // 没有注入强制打开的回调时（例如预览场景）退回默认按扩展名路由
+                    val handler = onOpenBuiltin
+                    if (handler != null) handler(entry.path, opener) else onOpenFile?.invoke(entry.path)
+                }
             },
         )
     }
@@ -767,6 +830,20 @@ fun BrowserScreen(
             hint = "这个压缩包需要密码才能解压",
             onDismiss = viewModel::dismissZipPassword,
             onConfirm = viewModel::submitZipPassword,
+        )
+    }
+    // 窗格里打开压缩包时的密码：读列表被挡，或解某一条被挡，都用同一个框
+    state.archivePrompt?.let { prompt ->
+        ArchivePasswordDialog(
+            fileName = prompt.fileName,
+            error = prompt.error,
+            hint = if (prompt.entryName == null) {
+                "这个压缩包需要密码才能打开"
+            } else {
+                "「${prompt.entryName.trimEnd('/').substringAfterLast('/')}」已加密"
+            },
+            onDismiss = viewModel::dismissArchivePassword,
+            onConfirm = viewModel::submitArchivePassword,
         )
     }
 
@@ -985,6 +1062,11 @@ private fun BrowserBreadcrumbBar(
     onRefresh: () -> Unit,
 ) {
     var sortOpen by remember { mutableStateOf(false) }
+    // 包内没有路径可编辑、也谈不上排序/过滤：这一行换成压缩包自己的标题
+    pane.archive?.let { archive ->
+        ArchivePathBar(archive = archive, onRefresh = onRefresh)
+        return
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1026,6 +1108,59 @@ private fun BrowserBreadcrumbBar(
                 SortItem("大小", SortField.SIZE, sort, onSort) { sortOpen = false }
                 SortItem("类型", SortField.TYPE, sort, onSort) { sortOpen = false }
             }
+        }
+        IconButton(onClick = onRefresh) {
+            Icon(
+                imageVector = Icons.Outlined.Refresh,
+                contentDescription = "刷新",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/**
+ * 压缩包状态下的「路径栏」：包名 + 包内当前目录 + 条目总数。
+ *
+ * 不提供路径编辑——包内路径不是真实路径，跳过去没有意义；刷新是重读整个包。
+ */
+@Composable
+private fun ArchivePathBar(archive: ArchiveView, onRefresh: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .padding(start = 12.dp, end = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.FolderZip,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = archive.name,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = buildString {
+                    append(if (archive.currentDir.isEmpty()) "/" else "/${archive.currentDir}")
+                    archive.entries?.let { append(" · ${it.size} 项") }
+                    if (archive.unlocked) append(" · 已解锁")
+                },
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         IconButton(onClick = onRefresh) {
             Icon(
@@ -1097,13 +1232,27 @@ private fun BrowserBottomBar(
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        NavAction(Icons.AutoMirrored.Outlined.ArrowBack, "后退", pane.canGoBack, Modifier.weight(1f), onBack)
-        NavAction(Icons.AutoMirrored.Outlined.ArrowForward, "前进", pane.canGoForward, Modifier.weight(1f), onForward)
+        // 压缩包里「后退/上级」都是「上一层目录」，退到包根再退一次就离开压缩包
+        val inArchive = pane.archive != null
+        NavAction(
+            Icons.AutoMirrored.Outlined.ArrowBack,
+            "后退",
+            inArchive || pane.canGoBack,
+            Modifier.weight(1f),
+            onBack,
+        )
+        NavAction(
+            Icons.AutoMirrored.Outlined.ArrowForward,
+            "前进",
+            !inArchive && pane.canGoForward,
+            Modifier.weight(1f),
+            onForward,
+        )
         Box(Modifier.weight(1f).fillMaxHeight()) {
             NavAction(
                 icon = Icons.Outlined.Add,
                 label = "新建",
-                enabled = true,
+                enabled = !inArchive,
                 modifier = Modifier.fillMaxSize(),
                 onClick = { newOpen = true },
             )
@@ -1126,8 +1275,8 @@ private fun BrowserBottomBar(
                 )
             }
         }
-        NavAction(Icons.Outlined.Sync, "同步", true, Modifier.weight(1f), onSync)
-        NavAction(Icons.Outlined.ArrowUpward, "上级", pane.path != "/", Modifier.weight(1f), onUp)
+        NavAction(Icons.Outlined.Sync, "同步", !inArchive, Modifier.weight(1f), onSync)
+        NavAction(Icons.Outlined.ArrowUpward, "上级", inArchive || pane.path != "/", Modifier.weight(1f), onUp)
     }
 }
 

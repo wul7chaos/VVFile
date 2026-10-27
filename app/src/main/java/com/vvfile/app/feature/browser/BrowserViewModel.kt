@@ -6,8 +6,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vvfile.app.R
 import com.vvfile.app.ServiceLocator
+import com.vvfile.app.core.archive.ArchivePasswordRequiredException
+import com.vvfile.app.core.archive.ArchivePasswordWrongException
 import com.vvfile.app.feature.archive.ArchiveEncryption
+import com.vvfile.app.feature.archive.ArchiveEntryInfo
 import com.vvfile.app.feature.archive.ArchiveFormats
+import com.vvfile.app.feature.archive.ArchiveIndex
 import com.vvfile.app.feature.archive.ArchivePasswords
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictPolicy
@@ -53,6 +57,10 @@ class BrowserViewModel : ViewModel() {
     val scroll = ScrollMemory()
 
     private val loadJobs = mutableMapOf<PaneId, Job>()
+    private val archiveJobs = mutableMapOf<PaneId, Job>()
+    /** 解包内条目时暂存的「解出来交给谁」与缓存目录：密码框关掉后还要接着解。 */
+    private var pendingArchiveOpen: ((String) -> Unit)? = null
+    private var pendingArchiveCacheDir: String? = null
     private var operationJob: Job? = null
     private var pendingTransfer: PendingTransfer? = null
     private var pendingUnzip: PendingUnzip? = null
@@ -454,6 +462,265 @@ class BrowserViewModel : ViewModel() {
         _state.update { it.copy(zipPasswordPrompt = null) }
     }
 
+    // ------------------------------------------------------------ 压缩包内嵌浏览 --
+
+    /**
+     * 在 [pane] 里打开压缩包。
+     *
+     * 不再整页盖住浏览器：这个窗格的列表直接换成包内条目，另一个窗格该干嘛干嘛。
+     * 密码先取内存缓存（同一个包本次运行只问一次），读不出来再弹框。
+     */
+    fun openArchive(pane: PaneId, path: String) {
+        archiveJobs[pane]?.cancel()
+        updatePane(pane) {
+            it.copy(
+                archive = ArchiveView(path = path, name = File(path).name),
+                selected = emptySet(),
+            )
+        }
+        setActive(pane)
+        loadArchive(pane, path, ArchivePasswords.get(path))
+    }
+
+    /** 退出压缩包浏览，回到包外那个目录的列表。 */
+    fun closeArchive(pane: PaneId) {
+        archiveJobs[pane]?.cancel()
+        clearArchiveExtracting(pane)
+        updatePane(pane) { it.copy(archive = null) }
+    }
+
+    /** 重新读一遍包内条目（列表顶部刷新用）。 */
+    fun reloadArchive(pane: PaneId) {
+        val view = paneState(pane).archive ?: return
+        loadArchive(pane, view.path, ArchivePasswords.get(view.path))
+    }
+
+    /** 进包里的一层目录。 */
+    fun archiveEnter(pane: PaneId, dir: String) {
+        val name = dir.trimEnd('/')
+        if (name.isEmpty()) return
+        updatePane(pane) { current ->
+            val view = current.archive ?: return@updatePane current
+            current.copy(archive = view.copy(currentDir = name))
+        }
+    }
+
+    /**
+     * 退一层；已经在包根返回 false，调用方据此决定是否退出压缩包
+     * （底部「后退」「上级」和系统返回键都走这一条）。
+     */
+    fun archiveUp(pane: PaneId): Boolean {
+        val view = paneState(pane).archive ?: return false
+        if (view.currentDir.isEmpty()) return false
+        updatePane(pane) {
+            it.copy(archive = view.copy(currentDir = ArchiveIndex.parentOf(view.currentDir)))
+        }
+        return true
+    }
+
+    /**
+     * 点包内条目：目录进下一层；文件解到 [cacheDir] 后把真实路径交给 [onReady]。
+     *
+     * 加密条目又没缓存密码时先问密码；解出来一条也就验过密码，本次运行内不再追问。
+     */
+    fun archiveTap(
+        pane: PaneId,
+        entry: ArchiveEntryInfo,
+        cacheDir: String,
+        onReady: (String) -> Unit,
+    ) {
+        if (entry.isDirectory) {
+            archiveEnter(pane, entry.name)
+            return
+        }
+        val view = paneState(pane).archive ?: return
+        if (view.extracting != null) return
+        val cached = ArchivePasswords.get(view.path)
+        if (cached != null || !entry.encrypted) {
+            pendingArchiveOpen = onReady
+            pendingArchiveCacheDir = cacheDir
+            extractArchiveEntry(pane, view.path, entry.name, cached, cacheDir)
+        } else {
+            pendingArchiveOpen = onReady
+            pendingArchiveCacheDir = cacheDir
+            _state.update {
+                it.copy(
+                    archivePrompt = ArchivePromptState(
+                        pane = pane,
+                        archivePath = view.path,
+                        fileName = view.name,
+                        entryName = entry.name,
+                    ),
+                )
+            }
+        }
+    }
+
+    /** 密码框确认：读列表的回去重读，解条目的接着解。 */
+    fun submitArchivePassword(input: String) {
+        val prompt = _state.value.archivePrompt ?: return
+        _state.update { it.copy(archivePrompt = null) }
+        val pane = prompt.pane
+        val view = paneState(pane).archive ?: return
+        if (view.path != prompt.archivePath) return
+        val entryName = prompt.entryName
+        if (entryName == null) {
+            loadArchive(pane, prompt.archivePath, input)
+            return
+        }
+        val cacheDir = pendingArchiveCacheDir ?: return
+        extractArchiveEntry(pane, prompt.archivePath, entryName, input, cacheDir)
+    }
+
+    /** 取消密码输入：包已经打开的话留在原地，只是这一条不解了。 */
+    fun dismissArchivePassword() {
+        _state.update { it.copy(archivePrompt = null) }
+        pendingArchiveOpen = null
+        pendingArchiveCacheDir = null
+    }
+
+    private fun loadArchive(pane: PaneId, path: String, password: String?) {
+        archiveJobs[pane]?.cancel()
+        updatePane(pane) { current ->
+            val view = current.archive ?: return@updatePane current
+            current.copy(archive = view.copy(loading = true, error = null))
+        }
+        archiveJobs[pane] = viewModelScope.launch {
+            try {
+                val entries = withContext(Dispatchers.IO) { ArchiveIndex.read(path, password) }
+                if (password != null) ArchivePasswords.remember(path, password)
+                updatePane(pane) { current ->
+                    val view = current.archive ?: return@updatePane current
+                    if (view.path != path) {
+                        current
+                    } else {
+                        current.copy(
+                            archive = view.copy(
+                                entries = entries,
+                                loading = false,
+                                error = null,
+                                unlocked = view.unlocked || password != null,
+                            ),
+                        )
+                    }
+                }
+            } catch (needed: ArchivePasswordRequiredException) {
+                stopArchiveLoading(pane)
+                _state.update {
+                    it.copy(archivePrompt = ArchivePromptState(pane, path, File(path).name))
+                }
+            } catch (wrong: ArchivePasswordWrongException) {
+                ArchivePasswords.forget(path)
+                stopArchiveLoading(pane)
+                _state.update {
+                    it.copy(
+                        archivePrompt = ArchivePromptState(
+                            pane = pane,
+                            archivePath = path,
+                            fileName = File(path).name,
+                            error = wrong.message ?: "密码不正确",
+                        ),
+                    )
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                updatePane(pane) { current ->
+                    val view = current.archive ?: return@updatePane current
+                    current.copy(
+                        archive = view.copy(loading = false, error = error.toUserMessage(path)),
+                    )
+                }
+            }
+        }
+    }
+
+    /** 解一条包内文件；[onReady] 由 [archiveTap] 暂存，成功后调用。 */
+    private fun extractArchiveEntry(
+        pane: PaneId,
+        archivePath: String,
+        entryName: String,
+        password: String?,
+        cacheDir: String,
+    ) {
+        updatePane(pane) { current ->
+            val view = current.archive ?: return@updatePane current
+            current.copy(archive = view.copy(extracting = entryName))
+        }
+        viewModelScope.launch {
+            try {
+                val target = withContext(Dispatchers.IO) {
+                    ArchiveIndex.extractTo(archivePath, entryName, File(cacheDir), password)
+                }
+                clearArchiveExtracting(pane)
+                if (target == null) {
+                    pendingArchiveOpen = null
+                    pendingArchiveCacheDir = null
+                    postMessage(UiMessage.Simple(R.string.ui_archive_entry_failed))
+                    return@launch
+                }
+                if (password != null) {
+                    ArchivePasswords.remember(archivePath, password)
+                    updatePane(pane) { current ->
+                        val view = current.archive ?: return@updatePane current
+                        current.copy(archive = view.copy(unlocked = true))
+                    }
+                }
+                val opener = pendingArchiveOpen
+                pendingArchiveOpen = null
+                pendingArchiveCacheDir = null
+                opener?.invoke(target.absolutePath)
+            } catch (needed: ArchivePasswordRequiredException) {
+                clearArchiveExtracting(pane)
+                _state.update {
+                    it.copy(
+                        archivePrompt = ArchivePromptState(
+                            pane = pane,
+                            archivePath = archivePath,
+                            fileName = File(archivePath).name,
+                            entryName = entryName,
+                        ),
+                    )
+                }
+            } catch (wrong: ArchivePasswordWrongException) {
+                clearArchiveExtracting(pane)
+                ArchivePasswords.forget(archivePath)
+                _state.update {
+                    it.copy(
+                        archivePrompt = ArchivePromptState(
+                            pane = pane,
+                            archivePath = archivePath,
+                            fileName = File(archivePath).name,
+                            entryName = entryName,
+                            error = wrong.message ?: "密码不正确",
+                        ),
+                    )
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                clearArchiveExtracting(pane)
+                pendingArchiveOpen = null
+                pendingArchiveCacheDir = null
+                postMessage(UiMessage.Simple(R.string.ui_archive_entry_failed))
+            }
+        }
+    }
+
+    private fun stopArchiveLoading(pane: PaneId) {
+        updatePane(pane) { current ->
+            val view = current.archive ?: return@updatePane current
+            current.copy(archive = view.copy(loading = false, error = null))
+        }
+    }
+
+    private fun clearArchiveExtracting(pane: PaneId) {
+        updatePane(pane) { current ->
+            val view = current.archive ?: return@updatePane current
+            current.copy(archive = view.copy(extracting = null))
+        }
+    }
+
     /** 冲突探测 + 起解压流程；[password] 一路带到 operator，加密条目靠它落地。 */
     private suspend fun proceedUnzip(zipPath: String, target: String, password: String?) {
         try {
@@ -803,6 +1070,8 @@ class BrowserViewModel : ViewModel() {
                 refreshing = refreshing,
                 error = null,
                 entries = if (keepEntries) it.entries else emptyList(),
+                // 切目录就离开压缩包；刷新同一目录不算
+                archive = if (pathChanged) null else it.archive,
                 // 切换目录时退出选择态；刷新同一目录保留选择
                 selected = if (pathChanged) emptySet() else it.selected,
             )
