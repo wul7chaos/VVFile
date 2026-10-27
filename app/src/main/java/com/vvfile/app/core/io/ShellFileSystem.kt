@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 /**
  * root/shell 只读通道：通过 `su -c` 执行 `ls`/`stat`，用于浏览应用自身无权访问的系统分区。
  *
- * 产品红线：只走 root（su），不接 Shizuku/ADB/无障碍；[exists] 为同步签名且无法安全阻塞，
+ * 特权操作只走 root（su）；[exists] 为同步签名且无法安全阻塞，
  * root-only 路径请用 `stat(path) != null` 判断。
  *
  * 注意：本类只提供读取；root 分区的写入/删除/重命名由后续 ShellFileOperator 负责。

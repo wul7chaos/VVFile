@@ -50,6 +50,7 @@ import com.vvfile.app.feature.media.ImageViewerScreen
 import com.vvfile.app.feature.media.MediaFormats
 import com.vvfile.app.feature.media.MediaKind
 import com.vvfile.app.feature.media.VideoPlayerScreen
+import com.vvfile.app.feature.onboarding.AgreementScreen
 import com.vvfile.app.feature.settings.SettingsScreen
 import com.vvfile.app.feature.terminal.TerminalScreen
 import com.vvfile.app.ui.theme.AccentPresets
@@ -76,8 +77,10 @@ class MainActivity : ComponentActivity() {
         locatePath.value = intent?.getStringExtra(EXTRA_LOCATE_PATH)
         setContent {
             val context = LocalContext.current
-            val settings by PrefsRepository.get(context).settings
-                .collectAsStateWithLifecycle(initialValue = Settings.DEFAULT)
+            val settingsState by PrefsRepository.get(context).settings
+                .collectAsStateWithLifecycle(initialValue = null)
+            // 还没读到设置时先当默认值用；协议页是否显示只看 agreementAccepted
+            val settings = settingsState ?: Settings.DEFAULT
             val darkTheme = when (settings.theme) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.DARK, ThemeMode.BLACK -> true
@@ -97,6 +100,21 @@ class MainActivity : ComponentActivity() {
                 pureBlack = settings.theme == ThemeMode.BLACK,
                 accent = AccentPresets.getOrNull(settings.accentIndex),
             ) {
+                // 首次启动只显示使用协议页，同意之后才进主界面
+                val accepted = settingsState?.agreementAccepted
+                if (accepted != true) {
+                    if (accepted == false) {
+                        AgreementScreen(
+                            onAccept = {
+                                lifecycleScope.launch {
+                                    PrefsRepository.get(this@MainActivity).setAgreementAccepted(true)
+                                }
+                            },
+                            onExit = { finish() },
+                        )
+                    }
+                    return@VVFileTheme
+                }
                 // 屏幕开关用 rememberSaveable：旋转屏幕后仍停留在同一页
                 // （终端的 ViewModel 会跨配置变更存活，PTY 会话不中断）。
                 var editingPath by rememberSaveable { mutableStateOf<String?>(null) }

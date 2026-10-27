@@ -1305,8 +1305,8 @@ private fun AboutDialog(onDismiss: () -> Unit) {
                 "VVFile ${BuildConfig.VERSION_NAME}\n\n" +
                     "专注本地文件管理：双窗格浏览、批量选择、复制/移动/删除/重命名、\n" +
                     "压缩与解压、root 系统分区读写、终端模拟器、文本编辑器。\n" +
-                    "不包含 APK 修改、会员、插件、回收站、MCP 等功能。\n\n" +
-                    "root 能力仅依赖设备上的 su，不接入 Shizuku / ADB。",
+                    "root 能力来自设备上的 su。\n\n" +
+                    "开发者：大肥鱼（DeepSeek-v4.1-flash-1017）",
             )
         },
         confirmButton = {

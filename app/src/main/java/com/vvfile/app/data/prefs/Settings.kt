@@ -29,6 +29,8 @@ data class Settings(
     /** 启动时回到上次浏览目录（startPath 优先）。 */
     val restoreLastPath: Boolean = true,
     val rootPolicy: RootPolicy = RootPolicy.AUTO,
+    /** 首次启动的使用协议是否已同意；未同意时只显示协议页。 */
+    val agreementAccepted: Boolean = false,
 ) {
     companion object {
         val DEFAULT: Settings = Settings()
@@ -65,6 +67,7 @@ data class Settings(
             directoriesFirst: Boolean? = null,
             restoreLastPath: Boolean? = null,
             rootPolicyKey: String? = null,
+            agreementAccepted: Boolean? = null,
         ): Settings = Settings(
             theme = themeFromKey(themeKey),
             dualPane = dualPane ?: DEFAULT.dualPane,
@@ -81,6 +84,7 @@ data class Settings(
             startPath = normalizeStartPath(startPath),
             restoreLastPath = restoreLastPath ?: DEFAULT.restoreLastPath,
             rootPolicy = rootPolicyFromKey(rootPolicyKey),
+            agreementAccepted = agreementAccepted ?: DEFAULT.agreementAccepted,
         )
 
         /** 空白路径等价于"使用默认启动目录"。 */

@@ -101,6 +101,10 @@ class PrefsRepository private constructor(
         current.copy(sort = current.sort.copy(ascending = ascending))
     }
 
+    suspend fun setAgreementAccepted(accepted: Boolean) = update {
+        it.copy(agreementAccepted = accepted)
+    }
+
     suspend fun setStartPath(path: String?) = update {
         it.copy(startPath = Settings.normalizeStartPath(path))
     }
@@ -133,6 +137,7 @@ private object PrefKeys {
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_ASCENDING = booleanPreferencesKey("sort_ascending")
     val START_PATH = stringPreferencesKey("start_path")
+    val AGREEMENT_ACCEPTED = booleanPreferencesKey("agreement_accepted")
 }
 
 private fun Preferences.toSettings(): Settings = Settings.fromStorage(
@@ -149,6 +154,7 @@ private fun Preferences.toSettings(): Settings = Settings.fromStorage(
     sortFieldKey = this[PrefKeys.SORT_FIELD],
     sortAscending = this[PrefKeys.SORT_ASCENDING],
     startPath = this[PrefKeys.START_PATH],
+    agreementAccepted = this[PrefKeys.AGREEMENT_ACCEPTED],
 )
 
 private fun MutablePreferences.write(settings: Settings) {
@@ -164,6 +170,7 @@ private fun MutablePreferences.write(settings: Settings) {
     this[PrefKeys.ROOT_POLICY] = settings.rootPolicy.name
     this[PrefKeys.SORT_FIELD] = Settings.sortFieldKey(settings.sort.field)
     this[PrefKeys.SORT_ASCENDING] = settings.sort.ascending
+    this[PrefKeys.AGREEMENT_ACCEPTED] = settings.agreementAccepted
     val startPath = Settings.normalizeStartPath(settings.startPath)
     if (startPath == null) {
         remove(PrefKeys.START_PATH)

@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * root 依然是「敲命令」而不是开关：`su` 就是往 PTY 里写 `su\r`，由系统 su 完成提权。
  *
- * 产品红线：root 只通过 `su` 二进制，不接入 Shizuku、ADB shell、无障碍。
+ * 提权只通过 `su` 二进制完成。
  */
 class TerminalViewModel(application: Application) : AndroidViewModel(application) {
 

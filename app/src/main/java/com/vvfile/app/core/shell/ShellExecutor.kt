@@ -12,8 +12,7 @@ import kotlinx.coroutines.withContext
 /**
  * 统一的命令执行器：非 root 走 `sh -c`，root 走 `su -c`。
  *
- * 产品红线：特殊权限只走 root。本类**不接入 Shizuku、ADB shell、无障碍**等
- * 任何提权通道；非 root 命令只是应用自身 uid 的 `sh`，不构成提权。
+ * 特权操作只走 root；非 root 命令只是应用自身 uid 的 `sh`。
  *
  * 实现要点：
  * - 固定 [ProcessBuilder] 数组形式，绝不使用 `Runtime.exec(String)` 或手工拆分命令；

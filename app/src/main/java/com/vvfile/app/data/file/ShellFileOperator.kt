@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
 /**
  * root 分区的写入通道：cp/mv/rm/mkdir/touch 全部经 `su -c` 执行。
  *
- * 约束：只走 root，不接 Shizuku/ADB/无障碍；压缩/解压暂不支持 root 路径。
+ * 约束：特权操作只走 root；压缩/解压暂不支持 root 路径。
  * 命令参数一律经 [ShellExecutor.shellQuote]，避免空格/特殊字符注入。
  */
 class ShellFileOperator(

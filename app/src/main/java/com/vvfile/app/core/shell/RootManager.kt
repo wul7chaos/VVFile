@@ -22,8 +22,7 @@ sealed class RootState {
 /**
  * root 可用性检测与授权状态缓存。
  *
- * 产品红线：特殊权限只走 root。本类只通过 `su -c` 探测，
- * **不接入 Shizuku、ADB shell、无障碍**等任何提权通道，也没有对应依赖。
+ * 本类只通过 `su -c` 探测。
  *
  * 探测命令固定为 `su -c id -u`：退出码为 0 且 stdout 为 `0` 才视为可用。
  * 结果缓存在进程内；用户拒绝后不会反复弹窗，需要重试时调用 [invalidate]。
@@ -61,7 +60,7 @@ object RootManager {
      * 真实探测 root：执行 `su -c id -u`。
      *
      * 成功结果（可用 / 拒绝 / 无 su）都会被缓存；并发调用只会探测一次。
-     * 这里只使用 `su`，不尝试 Shizuku、ADB 或无障碍等替代通道。
+     * 这里只使用 `su`。
      */
     suspend fun detect(): RootState = detectMutex.withLock {
         cachedState?.let { return it }
