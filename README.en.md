@@ -4,8 +4,6 @@
 
 A dual-pane file manager for Android. v1.0.
 
-![Main screen](docs/images/main-ui.png)
-
 One pane for folders, one for files. The pane you touch becomes the active pane.
 
 ## What it does
