@@ -1,0 +1,112 @@
+{
+  "name": "Kotlin",
+  "scopeName": "source.kotlin",
+  "comment": "VS Code 没有内置 Kotlin 语法，这份按 Kotlin 语言规范手写，规则形态对齐 VS Code 的 TextMate 语法",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#annotations" },
+    { "include": "#keywords" },
+    { "include": "#modifiers" },
+    { "include": "#numbers" },
+    { "include": "#types" },
+    { "include": "#functions" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "begin": "/\\*\\*(?!\\*/)",
+          "end": "\\*/",
+          "name": "comment.block.documentation.kotlin",
+          "patterns": [
+            { "match": "@[A-Za-z_][\\w.]*", "name": "storage.type.class.kdoc.kotlin" },
+            { "match": "\\b(TODO|FIXME|XXX)\\b", "name": "keyword.codetag.notation.kotlin" }
+          ]
+        },
+        { "begin": "/\\*", "end": "\\*/", "name": "comment.block.kotlin" },
+        { "match": "//.*$", "name": "comment.line.double-slash.kotlin" }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "begin": "\"\"\"",
+          "end": "\"\"\"",
+          "name": "string.quoted.triple.kotlin",
+          "patterns": [{ "match": "\\$\\{", "name": "punctuation.section.embedded.kotlin" }]
+        },
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.kotlin",
+          "patterns": [
+            { "match": "\\\\(u[0-9a-fA-F]{4}|.)", "name": "constant.character.escape.kotlin" },
+            {
+              "begin": "\\$\\{",
+              "end": "\\}",
+              "name": "meta.template.expression.kotlin",
+              "patterns": [{ "include": "$self" }]
+            },
+            { "match": "\\$[A-Za-z_][\\w]*", "name": "variable.other.interpolated.kotlin" }
+          ]
+        },
+        {
+          "begin": "'",
+          "end": "'",
+          "name": "string.quoted.single.kotlin",
+          "patterns": [
+            { "match": "\\\\(u[0-9a-fA-F]{4}|.)", "name": "constant.character.escape.kotlin" }
+          ]
+        }
+      ]
+    },
+    "annotations": {
+      "patterns": [
+        { "match": "@[A-Za-z_][\\w.]*", "name": "storage.type.annotation.kotlin" },
+        { "match": "@file:[A-Za-z_][\\w.]*", "name": "storage.type.annotation.kotlin" }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(package|import|class|interface|object|fun|val|var|typealias|if|else|when|for|while|do|return|break|continue|throw|try|catch|finally|is|as|as\\?|in|out|by|constructor|init|this|super|where|typeof)\\b",
+          "name": "keyword.control.kotlin"
+        },
+        { "match": "\\b(null|true|false)\\b", "name": "constant.language.kotlin" },
+        { "match": "\\b(it|field)\\b", "name": "variable.language.kotlin" }
+      ]
+    },
+    "modifiers": {
+      "patterns": [
+        {
+          "match": "\\b(private|public|protected|internal|abstract|final|open|override|sealed|data|enum|inline|noinline|crossinline|suspend|lateinit|const|vararg|reified|external|operator|infix|tailrec|companion|annotation|expect|actual|value|fun)\\b",
+          "name": "storage.modifier.kotlin"
+        },
+        {
+          "match": "\\b(Int|Long|Short|Byte|Float|Double|Boolean|Char|String|Unit|Any|Nothing|Array|List|MutableList|Map|MutableMap|Set|MutableSet|Pair|Triple|Sequence|Iterable|Collection|Comparable|Throwable|Exception|Error)\\b",
+          "name": "support.class.kotlin"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b(0[xX][0-9a-fA-F_]+|0[bB][01_]+|\\d[\\d_]*\\.?[\\d_]*([eE][+-]?\\d+)?[fFdDlLuU]?)\\b",
+          "name": "constant.numeric.kotlin"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        { "match": "\\b[A-Z][A-Za-z0-9_]*\\b", "name": "entity.name.type.kotlin" }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        { "match": "\\b[A-Za-z_][\\w]*(?=\\s*\\()", "name": "entity.name.function.kotlin" },
+        { "match": "\\b[A-Za-z_][\\w]*(?=\\s*\\{)", "name": "entity.name.function.kotlin" }
+      ]
+    }
+  }
+}

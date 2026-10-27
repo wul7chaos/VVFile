@@ -10,7 +10,6 @@ navigation = "2.9.4"
 datastore = "1.1.7"
 coroutines = "1.10.2"
 commonmark = "0.24.0"
-highlights = "1.0.0"
 media3 = "1.11.1"
 
 [libraries]
@@ -31,10 +30,11 @@ androidx-navigation-compose = { group = "androidx.navigation", name = "navigatio
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
-highlight = { group = "dev.snipme", name = "highlights", version.ref = "highlights" }
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+# 单测里 android.jar 的 org.json 是空壳，换成真实现（只在 test 配置生效）
+json = { group = "org.json", name = "json", version = "20240303" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

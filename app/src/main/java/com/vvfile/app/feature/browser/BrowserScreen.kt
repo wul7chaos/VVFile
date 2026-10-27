@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
@@ -90,8 +91,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -144,6 +147,7 @@ fun BrowserScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var hasPermission by remember { mutableStateOf(hasStoragePermission(context)) }
@@ -484,6 +488,10 @@ fun BrowserScreen(
                     onUnzipTo = { showUnzipTo = true },
                     onShare = {
                         FileSharer.share(context, activePane.selected.toList())
+                    },
+                    onCopyPath = {
+                        clipboard.setText(AnnotatedString(activePane.selected.joinToString("\n")))
+                        Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
                     },
                     onProperties = { openProperties(activeSelectedEntries) },
                 )
@@ -1005,13 +1013,6 @@ private fun BrowserBreadcrumbBar(
                 SortItem("修改时间", SortField.DATE, sort, onSort) { sortOpen = false }
                 SortItem("大小", SortField.SIZE, sort, onSort) { sortOpen = false }
                 SortItem("类型", SortField.TYPE, sort, onSort) { sortOpen = false }
-                DropdownMenuItem(
-                    text = { Text(if (sort.ascending) "当前：升序，点击改为降序" else "当前：降序，点击改为升序") },
-                    onClick = {
-                        sortOpen = false
-                        onSort(sort.field)
-                    },
-                )
             }
         }
         IconButton(onClick = onRefresh) {
@@ -1037,11 +1038,24 @@ private fun SortItem(
         text = { Text(label) },
         trailingIcon = {
             if (sort.field == field) {
-                Icon(
-                    imageVector = Icons.Outlined.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (sort.ascending) {
+                            Icons.Outlined.ArrowUpward
+                        } else {
+                            Icons.Outlined.ArrowDownward
+                        },
+                        contentDescription = if (sort.ascending) "升序" else "降序",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Icon(
+                        imageVector = Icons.Outlined.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         },
         onClick = {
@@ -1118,6 +1132,7 @@ private fun SelectionBottomBar(
     onUnzip: () -> Unit,
     onUnzipTo: () -> Unit,
     onShare: () -> Unit,
+    onCopyPath: () -> Unit,
     onProperties: () -> Unit,
 ) {
     var moreOpen by remember { mutableStateOf(false) }
@@ -1161,6 +1176,12 @@ private fun SelectionBottomBar(
                 onClick = { moreOpen = true },
             )
             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                SelectionMoreItem(
+                    icon = Icons.Outlined.ContentCopy,
+                    label = stringResource(R.string.ui_action_copy_path),
+                    onAction = onCopyPath,
+                    onClose = { moreOpen = false },
+                )
                 SelectionMoreItem(
                     icon = Icons.Outlined.Edit,
                     label = if (multi) "批量重命名" else stringResource(R.string.ui_action_rename),

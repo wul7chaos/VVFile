@@ -54,8 +54,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -99,7 +100,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.vvfile.app.R
 import com.vvfile.app.ui.theme.VVFileTheme
 import com.vvfile.app.ui.theme.VVWarn
@@ -1125,12 +1129,19 @@ private fun TextEditorBody(
     val lineCount = remember(value.text) { value.text.count { it == '\n' } + 1 }
     val gutterVisible = showLineNumbers && lineCount <= MAX_GUTTER_LINES
     val darkForSyntax = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    // 语法高亮：只在开关打开、且文件不太大时计算；否则用空表，视觉上等同纯文本
-    val syntaxSpans = remember(value.text, path, highlight, darkForSyntax) {
-        if (!highlight) {
+    // 语法高亮：分词放到 Default 线程，键一改就取消上一次，输入不会被解析拖住
+    val plainText = value.text
+    val syntaxSpans by produceState(
+        initialValue = emptyList<AnnotatedString.Range<SpanStyle>>(),
+        plainText,
+        path,
+        highlight,
+        darkForSyntax,
+    ) {
+        this.value = if (!highlight) {
             emptyList()
         } else {
-            EditorSyntax.spans(value.text, path, darkForSyntax)
+            withContext(Dispatchers.Default) { EditorSyntax.spans(plainText, path, darkForSyntax) }
         }
     }
     val syntaxTransformation = remember(syntaxSpans) {

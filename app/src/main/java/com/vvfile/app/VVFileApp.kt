@@ -7,6 +7,7 @@ import com.vvfile.app.core.io.NioFileSystem
 import com.vvfile.app.core.io.ShellFileSystem
 import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.core.shell.RootManager
+import com.vvfile.app.core.syntax.GrammarRegistry
 import com.vvfile.app.core.thumb.Thumbnails
 import com.vvfile.app.data.file.FallbackFileOperator
 import com.vvfile.app.data.file.FileOperator
@@ -22,6 +23,8 @@ class VVFileApp : Application() {
         ServiceLocator.init(this)
         // 列表缩略图的磁盘缓存目录（cacheDir/thumbs），整个进程只初始化一次
         Thumbnails.init(this)
+        // 语法高亮：assets/syntax 下的 VS Code 语法按需加载
+        GrammarRegistry.init(this)
     }
 }
 

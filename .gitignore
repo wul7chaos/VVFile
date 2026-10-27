@@ -29,6 +29,7 @@ docs/shots/*.tmp
 
 # ---- 外部参考仓库（只用于研究，不参与构建） ----
 termux-app/
+vscode/
 
 # ---- 图标生成原图（1024px，可由 design/icons/gen.py 重跑） ----
 design/icons/raw/

@@ -18,7 +18,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Archive
-import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
@@ -33,10 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
@@ -94,7 +89,6 @@ fun FileActionMenu(
     val pane = target.pane
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    var toolsOpen by remember { mutableStateOf(false) }
 
     val isArchive = !target.multi && !entry.isDirectory && entry.extension in ARCHIVE_EXTENSIONS
     val copyLabel = if (pane == PaneId.LEFT) "复制 ->" else "<- 复制"
@@ -133,27 +127,7 @@ fun FileActionMenu(
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                if (toolsOpen) {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
-                        MenuRow(
-                            icon = Icons.Outlined.ContentCopy,
-                            label = if (target.multi) "复制 ${target.count} 个路径" else "复制路径",
-                            onClick = {
-                                clipboard.setText(
-                                    AnnotatedString(target.targets.joinToString("\n") { it.path }),
-                                )
-                                Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
-                                onDismiss()
-                            },
-                        )
-                        MenuRow(
-                            icon = Icons.Outlined.Build,
-                            label = "返回",
-                            onClick = { toolsOpen = false },
-                        )
-                    }
-                } else {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                         val actions = buildList {
                             add(MenuAction(copyLabel, Icons.Outlined.ContentCopy) { onCopy() })
                             add(
@@ -170,11 +144,14 @@ fun FileActionMenu(
                             }
                             add(
                                 MenuAction(
-                                    label = "工具",
-                                    icon = Icons.Outlined.Build,
-                                    // 工具是二级页，不能像其它项那样先关掉菜单
-                                    keepOpen = true,
-                                ) { toolsOpen = true },
+                                    label = if (target.multi) "复制 ${target.count} 个路径" else "复制路径",
+                                    icon = Icons.Outlined.ContentCopy,
+                                ) {
+                                    clipboard.setText(
+                                        AnnotatedString(target.targets.joinToString("\n") { it.path }),
+                                    )
+                                    Toast.makeText(context, "已复制路径", Toast.LENGTH_SHORT).show()
+                                },
                             )
                             add(MenuAction("压缩", Icons.Outlined.Archive) { onCompress() })
                             add(MenuAction("属性", Icons.Outlined.Info) { onProperties() })
@@ -187,20 +164,19 @@ fun FileActionMenu(
                                 add(MenuAction("打开方式…", Icons.Outlined.OpenInNew) { onOpenWith() })
                             }
                         }
-                        actions.chunked(2).forEach { row ->
-                            Row(Modifier.fillMaxWidth()) {
-                                row.forEach { action ->
-                                    MenuCell(
-                                        action = action,
-                                        modifier = Modifier.weight(1f),
-                                        onClick = {
-                                            if (!action.keepOpen) onDismiss()
-                                            action.onClick()
-                                        },
-                                    )
-                                }
-                                if (row.size == 1) Spacer(Modifier.weight(1f))
+                    actions.chunked(2).forEach { row ->
+                        Row(Modifier.fillMaxWidth()) {
+                            row.forEach { action ->
+                                MenuCell(
+                                    action = action,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        onDismiss()
+                                        action.onClick()
+                                    },
+                                )
                             }
+                            if (row.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
                 }
@@ -213,8 +189,6 @@ private class MenuAction(
     val label: String,
     val icon: ImageVector,
     val dangerous: Boolean = false,
-    /** true 时点完不关闭菜单（用于「工具」这种打开二级页的项）。 */
-    val keepOpen: Boolean = false,
     val onClick: () -> Unit,
 )
 

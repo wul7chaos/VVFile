@@ -30,3 +30,12 @@ VVFile 自身代码为原创实现（含 UI 布局、交互与文案），**没�
   `VvTerminalViewClient`、`TerminalScreen`。
 
 Apache-2.0 全文见 <https://www.apache.org/licenses/LICENSE-2.0>。
+
+## VS Code 的 TextMate 语法（VS Code - Microsoft）
+
+- 上游：<https://github.com/microsoft/vscode>（`extensions/*/syntaxes/*.tmLanguage.json`）
+- 许可：**MIT**（VS Code 本体）；各语法文件属于对应扩展，随文件附带的许可与版权归上游作者
+- 引进范围：`design/syntax/pull.py` 按白名单拷进 `app/src/main/assets/syntax/grammars/`，
+  原样保留，未改一行内容；`design/syntax/kotlin.tmLanguage.json` 是本仓库自写（VS Code 没有 Kotlin 语法）
+- 运行时用途：编辑器的语法高亮（`core/syntax/` 自写的 TextMate 子集引擎），
+  不参与编译、不修改语法的匹配规则
