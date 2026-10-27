@@ -11,13 +11,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
-class ZipIndexTest {
+class ArchiveIndexTest {
 
     @get:Rule
     val temp = TemporaryFolder()
 
     private fun entry(name: String, size: Long = 0L, dir: Boolean = false) =
-        ZipEntryInfo(name, dir || name.endsWith("/"), size, 0L)
+        ArchiveEntryInfo(name, dir || name.endsWith("/"), size, 0L)
 
     private fun sampleZip(): File {
         val file = temp.newFile("sample.zip")
@@ -46,7 +46,7 @@ class ZipIndexTest {
             entry("docs/img/"),
             entry("docs/img/pic.png", 3),
         )
-        val root = ZipIndex.children(entries, "")
+        val root = ArchiveIndex.children(entries, "")
         assertEquals(listOf("docs/", "readme.txt"), root.map { it.name })
         assertTrue(root.first().isDirectory)
         assertEquals(0L, root.first().size)
@@ -60,7 +60,7 @@ class ZipIndexTest {
             entry("docs/img/"),
             entry("docs/img/pic.png", 3),
         )
-        val inside = ZipIndex.children(entries, "docs")
+        val inside = ArchiveIndex.children(entries, "docs")
         assertEquals(listOf("docs/guide.md", "docs/img/"), inside.map { it.name }.sorted())
         assertEquals(listOf("guide.md", "img"), inside.map { it.displayName }.sorted())
     }
@@ -69,9 +69,9 @@ class ZipIndexTest {
     fun `没有显式目录条目也能显示出目录`() {
         // 有些压缩工具不写目录项，只写完整文件路径
         val entries = listOf(entry("a/b/c.txt", 1))
-        assertEquals(listOf("a/"), ZipIndex.children(entries, "").map { it.name })
-        assertEquals(listOf("a/b/"), ZipIndex.children(entries, "a").map { it.name })
-        assertEquals(listOf("a/b/c.txt"), ZipIndex.children(entries, "a/b").map { it.name })
+        assertEquals(listOf("a/"), ArchiveIndex.children(entries, "").map { it.name })
+        assertEquals(listOf("a/b/"), ArchiveIndex.children(entries, "a").map { it.name })
+        assertEquals(listOf("a/b/c.txt"), ArchiveIndex.children(entries, "a/b").map { it.name })
     }
 
     @Test
@@ -82,21 +82,21 @@ class ZipIndexTest {
             entry("a.txt"),
             entry("c/"),
         )
-        val names = ZipIndex.children(entries, "").map { it.name }
+        val names = ArchiveIndex.children(entries, "").map { it.name }
         assertEquals(listOf("b/", "c/", "a.txt", "z.txt"), names)
     }
 
     @Test
     fun `parentOf 逐层回退`() {
-        assertEquals("a/b", ZipIndex.parentOf("a/b/c.txt"))
-        assertEquals("a", ZipIndex.parentOf("a/b"))
-        assertEquals("", ZipIndex.parentOf("a"))
-        assertEquals("", ZipIndex.parentOf(""))
+        assertEquals("a/b", ArchiveIndex.parentOf("a/b/c.txt"))
+        assertEquals("a", ArchiveIndex.parentOf("a/b"))
+        assertEquals("", ArchiveIndex.parentOf("a"))
+        assertEquals("", ArchiveIndex.parentOf(""))
     }
 
     @Test
     fun `读取真实压缩包`() {
-        val entries = ZipIndex.read(sampleZip().absolutePath)
+        val entries = ArchiveIndex.read(sampleZip().absolutePath)
         assertTrue(entries.any { it.name == "readme.txt" && it.size == 5L })
         assertTrue(entries.any { it.name == "docs/" && it.isDirectory })
         assertEquals("readme.txt", entries.first { it.name == "readme.txt" }.displayName)
@@ -106,7 +106,7 @@ class ZipIndexTest {
     fun `解压单个条目到目标目录`() {
         val zip = sampleZip()
         val out = temp.newFolder("out")
-        val extracted = ZipIndex.extractTo(zip.absolutePath, "docs/guide.md", out)
+        val extracted = ArchiveIndex.extractTo(zip.absolutePath, "docs/guide.md", out)
         assertNotNull(extracted)
         assertEquals("guide.md", extracted!!.name)
         assertEquals("# guide", extracted.readText())
@@ -121,7 +121,7 @@ class ZipIndexTest {
             zip.closeEntry()
         }
         val out = temp.newFolder("out2")
-        val extracted = ZipIndex.extractTo(file.absolutePath, "../../evil.txt", out)
+        val extracted = ArchiveIndex.extractTo(file.absolutePath, "../../evil.txt", out)
         assertNotNull(extracted)
         // 落在目标目录里，名字被压成最后一段
         assertEquals(out.absolutePath, extracted!!.parentFile?.absolutePath)
@@ -132,7 +132,7 @@ class ZipIndexTest {
     fun `目录条目不会被解压成文件`() {
         val zip = sampleZip()
         val out = temp.newFolder("out3")
-        assertEquals(null, ZipIndex.extractTo(zip.absolutePath, "docs/", out))
+        assertEquals(null, ArchiveIndex.extractTo(zip.absolutePath, "docs/", out))
         assertFalse(File(out, "docs").exists())
     }
 
@@ -141,7 +141,7 @@ class ZipIndexTest {
         val broken = temp.newFile("broken.zip")
         broken.writeText("not a zip")
         var failed = false
-        runCatching { ZipIndex.read(broken.absolutePath) }.onFailure { failed = true }
+        runCatching { ArchiveIndex.read(broken.absolutePath) }.onFailure { failed = true }
         assertTrue(failed)
     }
 }

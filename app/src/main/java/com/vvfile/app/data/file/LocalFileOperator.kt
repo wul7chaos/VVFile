@@ -1,5 +1,6 @@
 package com.vvfile.app.data.file
 
+import com.vvfile.app.core.archive.ZipCentralDirectory
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictInfo
 import com.vvfile.app.core.result.ConflictPolicy
@@ -534,7 +535,25 @@ class LocalFileOperator(
         val failures = mutableListOf<OperationFailure>()
         report(OperationProgress(phase = OperationPhase.PREPARING, currentName = "正在统计…"))
 
-        ZipFile(Paths.get(zipPath).toFile()).use { zip ->
+        // 先读中央目录的加密位：带密码的条目在后面 extract 时只会抛一个
+        // "invalid entry CRC"，对用户没有意义，这里直接点名
+        val archive = Paths.get(zipPath).toFile()
+        val encrypted = ZipCentralDirectory.encryptedNames(archive)
+
+        // Android 14+ 的 ZipFile 干脆打不开带加密条目的包（invalid CEN header），
+        // 这时连遍历都做不到，直接告诉用户需要密码
+        val zipFile = try {
+            ZipFile(archive)
+        } catch (error: Exception) {
+            if (encrypted.isNotEmpty()) {
+                return OperationResult(
+                    failures = listOf(OperationFailure(zipPath, "压缩包已加密，暂不支持输入密码")),
+                )
+            }
+            throw error
+        }
+
+        zipFile.use { zip ->
             val entries = zip.entries().toList()
             val totalBytes = entries.sumOf { if (it.isDirectory) 0L else it.size.coerceAtLeast(0L) }
             val tracker = ProgressTracker(totalBytes, entries.size, report)
@@ -542,6 +561,11 @@ class LocalFileOperator(
 
             for (entry in entries) {
                 coroutineContext.ensureActive()
+                if (entry.name in encrypted) {
+                    failures += OperationFailure(entry.name, "压缩包已加密，暂不支持输入密码")
+                    tracker.completeItem(entry.name)
+                    continue
+                }
                 var out = root.resolve(entry.name).normalize()
                 // Zip Slip：规范化后必须仍在目标目录内
                 if (!out.startsWith(root)) {

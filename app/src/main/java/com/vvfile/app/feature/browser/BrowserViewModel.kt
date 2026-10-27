@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vvfile.app.R
 import com.vvfile.app.ServiceLocator
+import com.vvfile.app.core.archive.ZipCentralDirectory
 import com.vvfile.app.core.path.PathUtils
 import com.vvfile.app.core.result.ConflictPolicy
 import com.vvfile.app.core.result.OperationEvent
@@ -415,6 +416,14 @@ class BrowserViewModel : ViewModel() {
         val target = targetDir?.trim()?.takeIf { it.isNotEmpty() } ?: pane.path
         if (target.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
         viewModelScope.launch {
+            // 带密码的包在 Android 14+ 连 ZipFile 都打不开，冲突探测只会抛异常；
+            // 先按中央目录点名，给一句能看懂的提示
+            val encrypted = withContext(Dispatchers.IO) {
+                runCatching { ZipCentralDirectory.hasEncryptedEntry(File(zip.path)) }.getOrDefault(false)
+            }
+            if (encrypted) {
+                return@launch postMessage(UiMessage.Simple(R.string.ui_ops_zip_encrypted))
+            }
             try {
                 val conflicts = operator.findZipConflicts(zip.path, target)
                 if (conflicts.isEmpty()) {

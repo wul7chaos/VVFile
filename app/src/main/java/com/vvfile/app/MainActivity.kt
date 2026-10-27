@@ -41,6 +41,7 @@ import com.vvfile.app.data.prefs.PrefsRepository
 import com.vvfile.app.data.prefs.Settings
 import com.vvfile.app.data.prefs.ThemeMode
 import com.vvfile.app.feature.apps.AppListScreen
+import com.vvfile.app.feature.archive.ArchiveFormats
 import com.vvfile.app.feature.archive.ArchiveScreen
 import com.vvfile.app.feature.browser.BuiltinOpener
 import com.vvfile.app.feature.browser.BrowserScreen
@@ -202,6 +203,12 @@ class MainActivity : ComponentActivity() {
                  * 其余交给系统。压缩包浏览里解出来的临时文件也走这里。
                  */
                 fun openPath(path: String) {
+                    // 压缩包（zip/apk/tar/tar.gz）一律先进包内浏览：想把 APK 交给安装器、
+                    // 或交给别的应用，走长按「打开方式」
+                    if (ArchiveFormats.isArchive(path)) {
+                        openReadOnly(path) { ready -> archivePath = ready }
+                        return
+                    }
                     when (MediaFormats.kindOf(path)) {
                         MediaKind.AUDIO -> {
                             ensureNotificationPermission()
@@ -251,15 +258,8 @@ class MainActivity : ComponentActivity() {
                         locateFile = locatePath.value,
                         onLocateHandled = { locatePath.value = null },
                         onOpenBuiltin = { path, opener -> openAs(path, opener) },
-                        onOpenFile = { path ->
-                            // 点压缩包直接进去看，而不是弹「选择打开方式」
-                            if (path.endsWith(".zip", ignoreCase = true)) {
-                                // root-only 目录里的包也要先落地一份，ZipFile 只认路径
-                                openReadOnly(path) { ready -> archivePath = ready }
-                            } else {
-                                openPath(path)
-                            }
-                        },
+                        // 点压缩包直接进去看，而不是弹「选择打开方式」；判断统一在 openPath 里做
+                        onOpenFile = { path -> openPath(path) },
                         onToolClick = { tool ->
                             when (tool) {
                                 "设置" -> showSettings = true
@@ -290,7 +290,7 @@ class MainActivity : ComponentActivity() {
 
                     archivePath?.let { path ->
                         ArchiveScreen(
-                            zipPath = path,
+                            archivePath = path,
                             onClose = { archivePath = null },
                             onOpenEntry = { extracted -> openPath(extracted) },
                             modifier = Modifier.fillMaxSize(),

@@ -1,5 +1,6 @@
 package com.vvfile.app.feature.archive
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,41 +50,42 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 压缩包浏览：点 zip 直接进来，像文件夹一样逐层看，点文件就地解到缓存再打开。
+ * 压缩包浏览：点 zip / apk / tar / tar.gz 直接进来，像文件夹一样逐层看，
+ * 点文件就地解到缓存再打开。
  *
- * 以前点 zip 会弹「选择打开方式」，让系统应用接管；文件管理器里点压缩包，
+ * 以前点压缩包会弹「选择打开方式」，让系统应用接管；文件管理器里点压缩包，
  * 第一反应应该是「进去看看里面有什么」。
  */
 @Composable
 fun ArchiveScreen(
-    zipPath: String,
+    archivePath: String,
     onClose: () -> Unit,
     onOpenEntry: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var entries by remember(zipPath) { mutableStateOf<List<ZipEntryInfo>?>(null) }
-    var error by remember(zipPath) { mutableStateOf<String?>(null) }
-    var currentDir by remember(zipPath) { mutableStateOf("") }
+    var entries by remember(archivePath) { mutableStateOf<List<ArchiveEntryInfo>?>(null) }
+    var error by remember(archivePath) { mutableStateOf<String?>(null) }
+    var currentDir by remember(archivePath) { mutableStateOf("") }
     var extracting by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(zipPath) {
+    LaunchedEffect(archivePath) {
         error = null
         entries = null
-        runCatching { withContext(Dispatchers.IO) { ZipIndex.read(zipPath) } }
+        runCatching { withContext(Dispatchers.IO) { ArchiveIndex.read(archivePath) } }
             .onSuccess { entries = it }
             .onFailure { error = it.message ?: "无法读取压缩包" }
     }
 
     val visible = remember(entries, currentDir) {
-        entries?.let { ZipIndex.children(it, currentDir) }.orEmpty()
+        entries?.let { ArchiveIndex.children(it, currentDir) }.orEmpty()
     }
-    val fileName = remember(zipPath) { File(zipPath).name }
+    val fileName = remember(archivePath) { File(archivePath).name }
 
     BackHandler {
         if (currentDir.isNotEmpty()) {
-            currentDir = ZipIndex.parentOf(currentDir)
+            currentDir = ArchiveIndex.parentOf(currentDir)
         } else {
             onClose()
         }
@@ -104,7 +106,7 @@ fun ArchiveScreen(
         ) {
             IconButton(onClick = {
                 if (currentDir.isNotEmpty()) {
-                    currentDir = ZipIndex.parentOf(currentDir)
+                    currentDir = ArchiveIndex.parentOf(currentDir)
                 } else {
                     onClose()
                 }
@@ -165,7 +167,9 @@ fun ArchiveScreen(
                 items(visible, key = { it.name }) { entry ->
                     FileRow(
                         entry = FileEntry(
-                            name = entry.displayName,
+                            // 加密条目在名字前面挂把锁：列表阶段看不出来，只能点开报错，
+                            // 那是最糟的体验
+                            name = if (entry.encrypted) "🔒 ${entry.displayName}" else entry.displayName,
                             path = entry.name,
                             isDirectory = entry.isDirectory,
                             size = entry.size,
@@ -177,15 +181,21 @@ fun ArchiveScreen(
                         // 包内条目还没落盘，没有可解码的源文件，别去试缩略图
                         showThumbnail = false,
                         onClick = {
-                            if (entry.isDirectory) {
+                            if (entry.encrypted) {
+                                Toast.makeText(
+                                    context,
+                                    "此条目已加密，暂不支持输入密码",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            } else if (entry.isDirectory) {
                                 currentDir = entry.name.trimEnd('/')
                             } else {
                                 // 解到缓存再交给统一的打开逻辑（文本/图片/视频都走同一条路）
                                 extracting = entry.name
                                 scope.launch {
                                     val target = withContext(Dispatchers.IO) {
-                                        ZipIndex.extractTo(
-                                            zipPath = zipPath,
+                                        ArchiveIndex.extractTo(
+                                            path = archivePath,
                                             entryName = entry.name,
                                             targetDir = archiveCacheDir(context),
                                         )
@@ -193,6 +203,14 @@ fun ArchiveScreen(
                                     extracting = null
                                     if (target != null) {
                                         onOpenEntry(target.absolutePath)
+                                    } else {
+                                        // 加密、CRC 损坏、软链接都走这里：说一句人话，
+                                        // 不要点了没反应
+                                        Toast.makeText(
+                                            context,
+                                            "解出失败：条目可能已加密或已损坏",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
                                     }
                                 }
                             }
