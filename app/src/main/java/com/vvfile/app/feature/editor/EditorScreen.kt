@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -106,6 +107,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.vvfile.app.R
 import com.vvfile.app.ui.theme.VVFileTheme
+import com.vvfile.app.ui.theme.VVDimens
 import com.vvfile.app.ui.theme.VVWarn
 
 /**
@@ -375,25 +377,6 @@ internal fun EditorContent(
             onToggleHighlight = onToggleHighlight,
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-        if (state.readOnlyMode) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "只读模式已开启，编辑与保存被禁用",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { onToggleReadOnlyMode(false) }) {
-                    Text("关闭只读", fontSize = 12.sp)
-                }
-            }
-        }
         val previewKind = remember(state.path) { PreviewKind.of(state.path) }
         val darkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
         val showEditor = previewKind == PreviewKind.NONE || layout != PreviewLayout.PREVIEW_ONLY
@@ -811,13 +794,13 @@ private fun EditorTopBar(
                 }
             }
             Text(
-                text = if (state.editingBlocked) {
+                text = if (state.readOnly) {
                     stringResource(R.string.editor_readonly_hint)
                 } else {
                     state.path
                 },
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                color = if (state.editingBlocked) {
+                color = if (state.readOnly) {
                     VVWarn
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -1406,9 +1389,12 @@ private fun EditorStatusBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(30.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp),
+            // 手势条还在时让开系统栏，藏起来之后靠 BottomBarGap 避圆角
+            .navigationBarsPadding()
+            .padding(bottom = VVDimens.BottomBarGap)
+            .height(30.dp)
+            .padding(horizontal = VVDimens.BottomBarHorizontal),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
     ) {
@@ -1417,10 +1403,17 @@ private fun EditorStatusBar(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (state.readOnly) {
+        // 只读提示只留在状态栏里，顶栏占位让给正文：文件本身只读显示「只读」，
+        // 手动开的只读模式显示「只读模式」，两者都是黄色，关掉走顶栏「更多」里的开关。
+        val readOnlyHint = when {
+            state.readOnlyMode -> R.string.editor_readonly_mode
+            state.readOnly -> R.string.editor_readonly_badge
+            else -> null
+        }
+        if (readOnlyHint != null) {
             Spacer(Modifier.width(8.dp))
             Text(
-                text = stringResource(R.string.editor_readonly_badge),
+                text = stringResource(readOnlyHint),
                 style = MaterialTheme.typography.labelMedium,
                 color = VVWarn,
             )
@@ -1718,3 +1711,4 @@ private fun EditorReadOnlyPreview() {
         )
     }
 }
+

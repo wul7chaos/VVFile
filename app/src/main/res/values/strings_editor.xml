@@ -5,6 +5,7 @@
     <string name="editor_save">保存</string>
     <string name="editor_saved">已保存</string>
     <string name="editor_readonly_badge">只读</string>
+    <string name="editor_readonly_mode">只读模式</string>
     <string name="editor_readonly_hint">只读（超过 5 MB）</string>
 
     <!-- 大文件（按行虚拟化的只读查看器） -->

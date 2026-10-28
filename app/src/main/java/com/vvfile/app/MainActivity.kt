@@ -30,6 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.vvfile.app.core.format.MimeTypes
@@ -78,6 +80,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        hideGestureBar()
         locatePath.value = intent?.getStringExtra(EXTRA_LOCATE_PATH)
         setContent {
             val context = LocalContext.current
@@ -354,6 +357,26 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * 藏掉屏幕底部那条全面屏手势横条。
+     *
+     * 只是不画那根短线：上滑回桌面、侧边滑动返回、上滑停住进多任务都照旧可用，
+     * 从下边缘往上蹭一下还能把系统栏临时唤出来（BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE）。
+     * 三键导航的设备同样适用——需要时上滑一下三个键就回来了。
+     */
+    private fun hideGestureBar() {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.navigationBars())
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // 从别的应用/输入法切回来时系统会把横条放回去，这里再藏一次
+        if (hasFocus) hideGestureBar()
     }
 
     override fun onNewIntent(intent: Intent) {

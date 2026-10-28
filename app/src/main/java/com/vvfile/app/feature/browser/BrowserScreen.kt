@@ -132,6 +132,7 @@ import com.vvfile.app.data.prefs.Settings as AppSettings
 import com.vvfile.app.ui.components.PathBar
 import com.vvfile.app.ui.components.PathInputDialog
 import com.vvfile.app.ui.theme.VVDanger
+import com.vvfile.app.ui.theme.VVDimens
 import com.vvfile.app.ui.theme.VVWarn
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -1228,6 +1229,7 @@ private fun BrowserBottomBar(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
             .navigationBarsPadding()
+            .padding(bottom = VVDimens.BottomBarGap)
             .height(54.dp)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1302,6 +1304,7 @@ private fun SelectionBottomBar(
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
             .navigationBarsPadding()
+            .padding(bottom = VVDimens.BottomBarGap)
             .height(54.dp)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1964,6 +1967,9 @@ private fun TrackPaneScroll(
         listState.scrollToItem(index, offset)
     }
 }
+
+
+
 
 
 

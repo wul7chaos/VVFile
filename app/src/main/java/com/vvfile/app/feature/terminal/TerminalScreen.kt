@@ -63,6 +63,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.termux.terminal.KeyHandler
 import com.termux.terminal.TextStyle
 import com.termux.view.TerminalView
+import com.vvfile.app.ui.theme.VVDimens
 import kotlin.math.roundToInt
 
 /**
@@ -322,7 +323,10 @@ private fun TerminalChrome(
             ctrlHeld = ctrlHeld,
             altHeld = altHeld,
             onKey = onKey,
-            modifier = Modifier.navigationBarsPadding(),
+            // 手势条藏起来后没有系统 inset，靠这点余量避开圆角
+            modifier = Modifier
+                .navigationBarsPadding()
+                .padding(bottom = VVDimens.BottomBarGap),
         )
     }
 }
@@ -577,3 +581,4 @@ private val LightTerminalPalette = TerminalPalette(
 
 private const val MIN_FONT_SP = 8
 private const val MAX_FONT_SP = 32
+
