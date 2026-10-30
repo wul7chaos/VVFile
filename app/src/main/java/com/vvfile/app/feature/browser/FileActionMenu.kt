@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Unarchive
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.vvfile.app.data.model.FileEntry
+import com.vvfile.app.core.install.ApkInstaller
 import com.vvfile.app.feature.archive.ArchiveFormats
 
 /**
@@ -85,6 +87,7 @@ fun FileActionMenu(
     onProperties: () -> Unit,
     onShare: () -> Unit,
     onOpenWith: () -> Unit,
+    onInstall: () -> Unit = {},
 ) {
     val entry = target.entry
     val pane = target.pane
@@ -92,6 +95,7 @@ fun FileActionMenu(
     val clipboard = LocalClipboardManager.current
 
     val isArchive = !target.multi && !entry.isDirectory && ArchiveFormats.canExtract(entry.path)
+    val isApk = !target.multi && !entry.isDirectory && ApkInstaller.isApkFile(entry.path)
     val copyLabel = if (pane == PaneId.LEFT) "复制 ->" else "<- 复制"
     val moveLabel = if (pane == PaneId.LEFT) "移动 ->" else "<- 移动"
 
@@ -130,6 +134,10 @@ fun FileActionMenu(
 
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                         val actions = buildList {
+                            // APK 的「安装」放第一个：这是点开 apk 最常做的事
+                            if (isApk) {
+                                add(MenuAction("安装", Icons.Outlined.InstallMobile) { onInstall() })
+                            }
                             add(MenuAction(copyLabel, Icons.Outlined.ContentCopy) { onCopy() })
                             add(
                                 MenuAction(
@@ -261,4 +269,5 @@ private fun MenuRow(
         )
     }
 }
+
 

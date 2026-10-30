@@ -25,9 +25,14 @@ object MediaFormats {
         "m2ts", "flv", "wmv", "mpg", "mpeg", "rmvb", "rm", "vob", "ogv",
     )
 
-    /** 常见图片格式；heic/avif 需要 Android 9+ 的系统解码器。 */
+    /**
+     * 常见图片格式；heic/avif 需要 Android 9+ 的系统解码器。
+     *
+     * ico 也在这里：Skia 的 ICO 解码器是系统自带的，内置查看器能直接看，
+     * 不该因为扩展名少见就先弹「打开方式」。
+     */
     val IMAGE: Set<String> = setOf(
-        "jpg", "jpeg", "jfif", "png", "gif", "webp", "bmp", "heic", "heif", "avif",
+        "jpg", "jpeg", "jfif", "png", "gif", "webp", "bmp", "heic", "heif", "avif", "ico",
     )
 
     fun extensionOf(path: String): String {

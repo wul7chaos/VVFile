@@ -116,12 +116,15 @@ import com.vvfile.app.feature.archive.ArchiveFormats
 import com.vvfile.app.feature.archive.ArchivePasswordDialog
 import com.vvfile.app.data.model.SortField
 import com.vvfile.app.data.model.SortSpec
+import com.vvfile.app.core.install.ApkInstaller
+import com.vvfile.app.core.install.InstallResult
 import com.vvfile.app.core.script.ScriptEnv
 import com.vvfile.app.core.script.ScriptExecutionPrefs
 import com.vvfile.app.core.script.ScriptRunResult
 import com.vvfile.app.core.script.ScriptRunner
 import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.core.shell.RootManager
+import com.vvfile.app.core.share.FileOpener
 import com.vvfile.app.core.share.FileSharer
 import com.vvfile.app.data.file.AggregateProperties
 import com.vvfile.app.data.file.AggregatePropertyReader
@@ -233,6 +236,10 @@ fun BrowserScreen(
     var nameDialog by remember { mutableStateOf<NameDialogState?>(null) }
     /** 批量重命名的目标条目；非空时展示对话框。 */
     var batchRenameTargets by remember { mutableStateOf<List<FileEntry>?>(null) }
+    /** 点开的 APK：先问装不装。 */
+    var apkTarget by remember { mutableStateOf<Pair<PaneId, FileEntry>?>(null) }
+    var installResult by remember { mutableStateOf<Pair<String, InstallResult>?>(null) }
+    var installing by remember { mutableStateOf(false) }
 
     /**
      * 长按打开操作菜单（对齐 MT）：按下的条目已经在选区里就作用于整批，否则把它设为唯一选中项。
@@ -293,6 +300,37 @@ fun BrowserScreen(
                     scriptPermission = mode.octal().takeLast(3)
                 }
             }
+        }
+    }
+
+    /**
+     * 装一个 APK。
+     *
+     * 有 root 就直接 `su -c pm install -r`：绕开系统安装器（不用逐次点确认，`Android/data`
+     * 里那种应用自己都读不到的包也能装）；没有 root 才退回系统安装器。
+     */
+    val installApk: (FileEntry) -> Unit = { entry ->
+        apkTarget = null
+        when {
+            installing -> Toast.makeText(context, "正在安装，请稍候", Toast.LENGTH_SHORT).show()
+            !ApkInstaller.isApkFile(entry.path) ->
+                Toast.makeText(context, "不是 APK 文件", Toast.LENGTH_SHORT).show()
+            RootAccess.allowed() -> {
+                installing = true
+                scope.launch {
+                    val outcome = withContext(Dispatchers.IO) {
+                        runCatching { ApkInstaller.installWithRoot(entry.path) }.getOrNull()
+                    }
+                    installing = false
+                    if (outcome != null) {
+                        installResult = entry.name to outcome
+                    } else {
+                        Toast.makeText(context, "安装失败", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            !FileOpener.open(context, entry.path) ->
+                Toast.makeText(context, "没有可用的安装器", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -444,6 +482,9 @@ fun BrowserScreen(
                 viewModel.setActive(paneId)
                 when {
                     entry.isScript -> openScript(entry)
+                    // APK 先问一句「装 / 看包里有什么」，别默认就进包内浏览
+                    !entry.isDirectory && ApkInstaller.isApkFile(entry.path) ->
+                        apkTarget = paneId to entry
                     ArchiveFormats.isArchive(File(entry.path)) -> openArchiveInPane(paneId, entry.path)
                     FileOpening.needsChooser(entry.path) -> openWithTarget = entry
                     onOpenFile != null -> onOpenFile(entry.path)
@@ -662,6 +703,31 @@ fun BrowserScreen(
         )
     }
 
+    apkTarget?.let { (paneId, entry) ->
+        ApkActionDialog(
+            fileName = entry.name,
+            rootAvailable = RootAccess.allowed(),
+            onInstall = { installApk(entry) },
+            onBrowse = {
+                apkTarget = null
+                openArchiveInPane(paneId, entry.path)
+            },
+            onOpenWith = {
+                apkTarget = null
+                openWithTarget = entry
+            },
+            onDismiss = { apkTarget = null },
+        )
+    }
+
+    installResult?.let { (name, result) ->
+        InstallResultDialog(
+            fileName = name,
+            result = result,
+            onDismiss = { installResult = null },
+        )
+    }
+
     actionTarget?.let { target ->
         val entry = target.entry
         val targets = target.targets
@@ -682,6 +748,7 @@ fun BrowserScreen(
             onProperties = { openProperties(targets) },
             onShare = { FileSharer.share(context, targets.map { it.path }) },
             onOpenWith = { openWithTarget = entry },
+            onInstall = { installApk(entry) },
         )
     }
 
@@ -1972,6 +2039,8 @@ private fun TrackPaneScroll(
         listState.scrollToItem(index, offset)
     }
 }
+
+
 
 
 

@@ -22,6 +22,8 @@ class FileOpeningTest {
         assertFalse(FileOpening.needsChooser("/sdcard/pic.png"))
         assertFalse(FileOpening.needsChooser("/sdcard/movie.mp4"))
         assertFalse(FileOpening.needsChooser("/sdcard/song.mp3"))
+        // ico 是内置查看器能直接看的，不该先弹面板
+        assertFalse(FileOpening.needsChooser("/sdcard/head.ico"))
     }
 
     @Test
@@ -31,3 +33,4 @@ class FileOpeningTest {
         assertTrue(FileOpening.needsChooser("/sdcard/无扩展名"))
     }
 }
+

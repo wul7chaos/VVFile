@@ -14,6 +14,8 @@ class MediaFormatsTest {
         assertEquals(MediaKind.VIDEO, MediaFormats.kindOf("/sdcard/a.MKV"))
         assertEquals(MediaKind.IMAGE, MediaFormats.kindOf("/sdcard/a.jpeg"))
         assertEquals(MediaKind.IMAGE, MediaFormats.kindOf("/sdcard/a.HEIC"))
+        assertEquals(MediaKind.IMAGE, MediaFormats.kindOf("/sdcard/head.ico"))
+        assertEquals(MediaKind.IMAGE, MediaFormats.kindOf("/sdcard/HEAD.ICO"))
         assertNull(MediaFormats.kindOf("/sdcard/a.txt"))
         assertNull(MediaFormats.kindOf("/sdcard/noext"))
         assertNull(MediaFormats.kindOf("/sdcard/folder.with.dot/name"))
@@ -95,3 +97,4 @@ class MediaFormatsTest {
         assertEquals("列表循环", MediaFormats.repeatLabel(MediaFormats.REPEAT_ALL))
     }
 }
+

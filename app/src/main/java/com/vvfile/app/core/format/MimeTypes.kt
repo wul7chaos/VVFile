@@ -29,6 +29,7 @@ object MimeTypes {
         "webp" to "image/webp",
         "bmp" to "image/bmp",
         "heic" to "image/heic",
+        "ico" to "image/x-icon",
         "svg" to "image/svg+xml",
         "mp4" to "video/mp4",
         "mkv" to "video/x-matroska",
