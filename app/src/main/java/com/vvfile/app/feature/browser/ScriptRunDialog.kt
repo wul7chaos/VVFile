@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.vvfile.app.core.script.ScriptEnv
 import com.vvfile.app.core.script.ScriptRunResult
 import com.vvfile.app.core.script.ScriptRunner
+import com.vvfile.app.ui.theme.VVWarn
 
 /**
  * `.sh` 文件的处理菜单（对齐 MT：点击脚本先弹菜单，而不是直接进编辑器）。
@@ -219,7 +220,10 @@ fun ScriptResultDialog(
                 Text(text = fileName, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = if (result.success) "执行完成" else "执行失败（exit ${result.exitCode}）",
+                    text = buildString {
+                        append(if (result.success) "执行完成" else "执行失败（exit ${result.exitCode}）")
+                        if (result.asRoot) append(" · ROOT 权限")
+                    },
                     fontSize = 11.sp,
                     color = if (result.success) {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -227,17 +231,20 @@ fun ScriptResultDialog(
                         MaterialTheme.colorScheme.error
                     },
                 )
+                if (result.escalated) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "普通权限进不去这个目录，已自动改用 ROOT 执行",
+                        fontSize = 11.sp,
+                        color = VVWarn,
+                    )
+                }
             }
         },
         text = {
+            // 只给脚本自己吐出来的输出，不再回显拼出来的那串 shell 命令：
+            // 用户要的是「跑出什么结果」，命令长什么样对结果判断没帮助
             Column(Modifier.heightIn(max = 400.dp)) {
-                Text(
-                    text = "\$ ${result.command}",
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
                 Text(
                     text = result.output.ifBlank { "（无输出）" },
                     fontSize = 12.sp,
@@ -252,3 +259,4 @@ fun ScriptResultDialog(
         },
     )
 }
+

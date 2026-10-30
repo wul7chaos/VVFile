@@ -276,6 +276,11 @@ fun BrowserScreen(
         val fromListing = entry.permissions?.let { PermissionMode.fromSymbolic(it) }
         scriptCurrentMode = fromListing
         if (fromListing != null) scriptPermission = fromListing.octal().takeLast(3)
+        // 普通权限够不着这种目录（/data/adb 之类）：执行环境先预选成 ROOT，
+        // 免得点了「执行」才看到 Permission denied
+        if (!ScriptRunner.canReachAsSystem(entry.path) && RootManager.isAvailable()) {
+            scriptEnv = ScriptEnv.ROOT
+        }
         scriptTarget = entry
         if (fromListing == null) {
             // 列表没带权限（部分 FUSE 卷），补读一次属性
