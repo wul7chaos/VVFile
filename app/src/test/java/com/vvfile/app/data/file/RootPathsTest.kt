@@ -41,6 +41,24 @@ class RootPathsTest {
     fun `主用户存储及其子目录不需要 root`() {
         assertFalse(RootPaths.isRootOnly("/storage/emulated/0"))
         assertFalse(RootPaths.isRootOnly("/storage/emulated/0/Download"))
-        assertFalse(RootPaths.isRootOnly("/storage/emulated/0/Android/data"))
+    }
+
+    @Test
+    fun `Android data 与 obb 需要 root`() {
+        // Android 11 起 FUSE 对应用一律返 ENOENT：能列出来也改不了，只能走 root
+        assertTrue(RootPaths.isRootOnly("/storage/emulated/0/Android/data"))
+        assertTrue(
+            RootPaths.isRootOnly(
+                "/storage/emulated/0/Android/data/com.tencent.mobileqq/Tencent/QQfile_recv/a.apk",
+            ),
+        )
+        assertTrue(RootPaths.isRootOnly("/storage/emulated/0/Android/obb/com.example"))
+        assertTrue(RootPaths.isRootOnly("/sdcard/Android/data/com.example/cache"))
+        // Android/media 是应用自己的可写目录，别误判
+        assertFalse(
+            RootPaths.isRootOnly("/storage/emulated/0/Android/media/com.vvfile.app"),
+        )
+        // 名字里带 Android 的普通目录也不该算进来
+        assertFalse(RootPaths.isRootOnly("/storage/emulated/0/Download/Android/notes"))
     }
 }
