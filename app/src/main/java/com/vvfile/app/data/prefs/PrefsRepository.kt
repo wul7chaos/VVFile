@@ -105,6 +105,7 @@ class PrefsRepository private constructor(
         it.copy(agreementAccepted = accepted)
     }
 
+
     suspend fun setStartPath(path: String?) = update {
         it.copy(startPath = Settings.normalizeStartPath(path))
     }
@@ -178,4 +179,3 @@ private fun MutablePreferences.write(settings: Settings) {
         this[PrefKeys.START_PATH] = startPath
     }
 }
-

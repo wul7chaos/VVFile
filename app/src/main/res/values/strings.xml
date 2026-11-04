@@ -7,4 +7,5 @@
     <string name="text_selection_more">更多…</string>
     <!-- 其他应用「打开方式」里显示的名字 -->
     <string name="locate_label">定位所在目录</string>
+    <string name="send_to_pc_label">发送到电脑</string>
 </resources>

@@ -55,6 +55,7 @@ import com.vvfile.app.feature.media.MediaKind
 import com.vvfile.app.feature.media.VideoPlayerScreen
 import com.vvfile.app.feature.onboarding.AgreementScreen
 import com.vvfile.app.feature.settings.SettingsScreen
+import com.vvfile.app.feature.transfer.SendToPcDialog
 import com.vvfile.app.feature.terminal.TerminalScreen
 import com.vvfile.app.ui.theme.AccentPresets
 import com.vvfile.app.ui.theme.VVFileTheme
@@ -74,6 +75,12 @@ class MainActivity : ComponentActivity() {
     /** 从「定位所在目录」带上来的目标文件；Compose 消费后清空。 */
     private val locatePath = mutableStateOf<String?>(null)
 
+    /**
+     * 从「发送到电脑」入口带上来的文件（换行分隔）。和 [locatePath] 一样存在 Activity 上，
+     * 因为 SendToPcActivity 是先拉起 `singleTop` 的本页面再结束自己。
+     */
+    private val sendToPcPaths = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
@@ -82,6 +89,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         hideGestureBar()
         locatePath.value = intent?.getStringExtra(EXTRA_LOCATE_PATH)
+        sendToPcPaths.value = intent?.getStringExtra(EXTRA_SEND_TO_PC_PATHS)
         setContent {
             val context = LocalContext.current
             val settingsState by PrefsRepository.get(context).settings
@@ -135,6 +143,8 @@ class MainActivity : ComponentActivity() {
                 var imagePath by rememberSaveable { mutableStateOf<String?>(null) }
                 // 「应用信息」点数据目录后带到浏览器的目标路径
                 var browseTarget by rememberSaveable { mutableStateOf<String?>(null) }
+                // 「发送到电脑」要发的文件（换行分隔）；两个入口合流到这里
+                var sendPaths by rememberSaveable { mutableStateOf<String?>(null) }
 
                 val notificationPermission = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission(),
@@ -246,6 +256,17 @@ class MainActivity : ComponentActivity() {
                     showApps = false
                 }
 
+                // 从别的应用「打开方式 → 发送到电脑」进来：直接弹发送面板
+                LaunchedEffect(sendToPcPaths.value) {
+                    val incoming = sendToPcPaths.value ?: return@LaunchedEffect
+                    editingPath = null
+                    showSettings = false
+                    showTerminal = false
+                    showApps = false
+                    sendPaths = incoming
+                    sendToPcPaths.value = null
+                }
+
                 Box(Modifier.fillMaxSize()) {
                     BrowserScreen(
                         navigateTo = browseTarget,
@@ -255,6 +276,7 @@ class MainActivity : ComponentActivity() {
                         onOpenBuiltin = { path, opener -> openAs(path, opener) },
                         // 点压缩包直接进去看，而不是弹「选择打开方式」；判断统一在 openPath 里做
                         onOpenFile = { path -> openPath(path) },
+                        onSendToPc = { paths -> sendPaths = paths.joinToString("\n") },
                         onToolClick = { tool ->
                             when (tool) {
                                 "设置" -> showSettings = true
@@ -354,6 +376,18 @@ class MainActivity : ComponentActivity() {
                     videoPath?.let { path ->
                         VideoPlayerScreen(path = path, onClose = { videoPath = null })
                     }
+
+                    sendPaths?.let { raw ->
+                        val paths = raw.split('\n').filter { it.isNotBlank() }
+                        if (paths.isNotEmpty()) {
+                            SendToPcDialog(
+                                paths = paths,
+                                onDismiss = { sendPaths = null },
+                            )
+                        } else {
+                            sendPaths = null
+                        }
+                    }
                 }
             }
         }
@@ -383,6 +417,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         intent.getStringExtra(EXTRA_LOCATE_PATH)?.let { locatePath.value = it }
+        intent.getStringExtra(EXTRA_SEND_TO_PC_PATHS)?.let { sendToPcPaths.value = it }
     }
 
     /**
@@ -408,5 +443,9 @@ class MainActivity : ComponentActivity() {
 
         /** 「定位所在目录」传来的目标文件绝对路径。 */
         const val EXTRA_LOCATE_PATH = "com.vvfile.app.extra.LOCATE_PATH"
+
+        /** 「发送到电脑」从别的应用带过来的文件，换行分隔。 */
+        const val EXTRA_SEND_TO_PC_PATHS = "com.vvfile.app.extra.SEND_TO_PC_PATHS"
     }
 }
+

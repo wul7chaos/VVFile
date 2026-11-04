@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
@@ -88,6 +89,7 @@ fun FileActionMenu(
     onShare: () -> Unit,
     onOpenWith: () -> Unit,
     onInstall: () -> Unit = {},
+    onSendToPc: () -> Unit = {},
 ) {
     val entry = target.entry
     val pane = target.pane
@@ -165,6 +167,7 @@ fun FileActionMenu(
                             add(MenuAction("压缩", Icons.Outlined.Archive) { onCompress() })
                             add(MenuAction("属性", Icons.Outlined.Info) { onProperties() })
                             add(MenuAction("分享", Icons.Outlined.Share) { onShare() })
+                            add(MenuAction("发送到电脑", Icons.Outlined.Computer) { onSendToPc() })
                             if (isArchive) {
                                 add(MenuAction("解压", Icons.Outlined.Unarchive) { onUnzip() })
                                 add(MenuAction("解压到…", Icons.Outlined.FolderOpen) { onUnzipTo() })
@@ -269,5 +272,7 @@ private fun MenuRow(
         )
     }
 }
+
+
 
 

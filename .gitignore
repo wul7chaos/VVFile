@@ -15,6 +15,9 @@ app/debug/
 *.keystore
 keystore.properties
 
+# ---- 电脑端接收器产物（用 pc/VvFileReceiver/build.ps1 生成） ----
+pc/dist/
+
 # ---- 系统 ----
 .DS_Store
 Thumbs.db
@@ -39,3 +42,4 @@ design/appicon/tmp*.png
 
 # ---- 本地截图（只在本地留证，不入库） ----
 docs/shots/
+

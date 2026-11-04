@@ -148,6 +148,8 @@ fun BrowserScreen(
     onOpenFile: ((String) -> Unit)? = null,
     /** 「打开方式」里选了某个内置打开器：强制按这种方式打开，不再按扩展名猜。 */
     onOpenBuiltin: ((String, BuiltinOpener) -> Unit)? = null,
+    /** 长按菜单「发送到电脑」：把选中的路径交出去，面板统一在 MainActivity 里弹。 */
+    onSendToPc: ((List<String>) -> Unit)? = null,
     onToolClick: ((String) -> Unit)? = null,
     /** 外部（如应用信息弹窗）请求跳转的路径；消费后回调 [onNavigateHandled]。 */
     navigateTo: String? = null,
@@ -749,6 +751,7 @@ fun BrowserScreen(
             onShare = { FileSharer.share(context, targets.map { it.path }) },
             onOpenWith = { openWithTarget = entry },
             onInstall = { installApk(entry) },
+            onSendToPc = { onSendToPc?.invoke(targets.map { it.path }) },
         )
     }
 

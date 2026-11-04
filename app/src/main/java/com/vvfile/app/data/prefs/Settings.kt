@@ -91,3 +91,4 @@ data class Settings(
         fun normalizeStartPath(raw: String?): String? = raw?.trim()?.takeIf { it.isNotEmpty() }
     }
 }
+
