@@ -30,14 +30,71 @@ object PcDiscovery {
     private const val PROBE = "VVFILE?DISCOVER=1"
     private const val APP_TAG = "vvfile-receiver"
     const val DEFAULT_TIMEOUT_MS: Long = 2_200
+    /** 缓存命中时只发一个 /ping，超时给短一点，连不上就立刻转扫描。 */
+    private const val CACHED_PING_TIMEOUT_MS: Int = 900
+    /** 预热结果的有效期：两分钟内开面板不再重新找。 */
+    private const val CACHE_FRESH_MS: Long = 120_000
 
     /** 本次进程里上次找到的电脑，下次先试它（省掉一轮扫描）。 */
     @Volatile
     private var lastFound: PcTarget? = null
 
+    /** 最近一次成功连接的结果与时间：应用启动时预热，面板打开就能直接用。 */
+    @Volatile
+    private var cachedFound: Found? = null
+    @Volatile
+    private var cachedAt: Long = 0L
+
+    /**
+     * 应用启动时先在后台找一次：有缓存就 ping 一下，没有就扫一遍。
+     * 结果留在 [peek] 里，等用户真正点「发送到电脑」时已经就绪，面板不用再等。
+     * 找不到就安静结束，等面板打开时再试。
+     */
+    suspend fun warmUp(cached: PcTarget?, port: Int = PORT): Found? {
+        peek()?.let { return it }
+        return runCatching { connect(cached, port = port) }.getOrNull()
+    }
+
+    /** 预热结果还能用时直接拿出来，省掉面板打开时的等待。 */
+    fun peek(maxAgeMs: Long = CACHE_FRESH_MS): Found? {
+        val hit = cachedFound ?: return null
+        return hit.takeIf { System.currentTimeMillis() - cachedAt <= maxAgeMs }
+    }
+
+    /** 记录一次成功连接（启动预热与面板里的连接都写这里）。 */
+    private fun remember(found: Found) {
+        lastFound = found.target
+        cachedFound = found
+        cachedAt = System.currentTimeMillis()
+    }
+
     /** 发现结果；[dir] 是电脑端要保存到的目录，用来在面板上给人确认。 */
     data class Found(val target: PcTarget, val dir: String?) {
         val label: String get() = target.authority
+    }
+
+    /**
+     * 先试缓存里的电脑（上次连上的那台），连不上再走广播 + 子网扫描。
+     *
+     * 缓存命中时只发一个 `GET /ping`，通常几十毫秒就回来了，
+     * 不用每次都把整个局域网扫一遍；电脑换了 IP 也只是多走一次扫描，找到后缓存会更新。
+     */
+    suspend fun connect(
+        cached: PcTarget?,
+        port: Int = PORT,
+        pingTimeoutMs: Int = CACHED_PING_TIMEOUT_MS,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+        targets: List<InetAddress>? = null,
+    ): Found? {
+        if (cached != null) {
+            val ping = PcUploader.ping(cached, pingTimeoutMs)
+            if (ping.ok) {
+                val hit = Found(cached, ping.dir)
+                remember(hit)
+                return hit
+            }
+        }
+        return discover(port = port, timeoutMs = timeoutMs, targets = targets)
     }
 
     /**
@@ -66,7 +123,7 @@ object PcDiscovery {
                 await(socket, port, timeoutMs)
             }
         }.getOrNull()
-        if (found != null) lastFound = found.target
+        if (found != null) remember(found)
         found
     }
 
@@ -138,3 +195,4 @@ object PcDiscovery {
     private val JSON_PORT = Regex("\"port\"\\s*:\\s*(\\d+)")
     private val JSON_DIR = Regex("\"dir\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
 }
+

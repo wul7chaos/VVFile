@@ -106,6 +106,14 @@ class PrefsRepository private constructor(
     }
 
 
+    /** 记住上次连上的电脑，下次「发送到电脑」先试它，省一轮局域网扫描。 */
+    suspend fun setPcTarget(host: String?, port: Int) = update { current ->
+        current.copy(
+            pcHost = host?.trim()?.takeIf { it.isNotEmpty() },
+            pcPort = port,
+        )
+    }
+
     suspend fun setStartPath(path: String?) = update {
         it.copy(startPath = Settings.normalizeStartPath(path))
     }
@@ -138,6 +146,8 @@ private object PrefKeys {
     val SORT_FIELD = stringPreferencesKey("sort_field")
     val SORT_ASCENDING = booleanPreferencesKey("sort_ascending")
     val START_PATH = stringPreferencesKey("start_path")
+    val PC_HOST = stringPreferencesKey("pc_host")
+    val PC_PORT = intPreferencesKey("pc_port")
     val AGREEMENT_ACCEPTED = booleanPreferencesKey("agreement_accepted")
 }
 
@@ -156,6 +166,8 @@ private fun Preferences.toSettings(): Settings = Settings.fromStorage(
     sortAscending = this[PrefKeys.SORT_ASCENDING],
     startPath = this[PrefKeys.START_PATH],
     agreementAccepted = this[PrefKeys.AGREEMENT_ACCEPTED],
+    pcHost = this[PrefKeys.PC_HOST],
+    pcPort = this[PrefKeys.PC_PORT] ?: 0,
 )
 
 private fun MutablePreferences.write(settings: Settings) {
@@ -172,6 +184,14 @@ private fun MutablePreferences.write(settings: Settings) {
     this[PrefKeys.SORT_FIELD] = Settings.sortFieldKey(settings.sort.field)
     this[PrefKeys.SORT_ASCENDING] = settings.sort.ascending
     this[PrefKeys.AGREEMENT_ACCEPTED] = settings.agreementAccepted
+    val pcHost = Settings.normalizeStartPath(settings.pcHost)
+    if (pcHost == null) {
+        remove(PrefKeys.PC_HOST)
+        remove(PrefKeys.PC_PORT)
+    } else {
+        this[PrefKeys.PC_HOST] = pcHost
+        this[PrefKeys.PC_PORT] = settings.pcPort
+    }
     val startPath = Settings.normalizeStartPath(settings.startPath)
     if (startPath == null) {
         remove(PrefKeys.START_PATH)

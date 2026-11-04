@@ -9,6 +9,8 @@ import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.core.shell.RootManager
 import com.vvfile.app.core.syntax.GrammarRegistry
 import com.vvfile.app.core.thumb.Thumbnails
+import com.vvfile.app.core.transfer.PcDiscovery
+import com.vvfile.app.core.transfer.PcTarget
 import com.vvfile.app.data.file.FallbackFileOperator
 import com.vvfile.app.data.file.FileOperator
 import com.vvfile.app.data.file.FileRepository
@@ -16,8 +18,16 @@ import com.vvfile.app.data.file.LocalFileOperator
 import com.vvfile.app.data.file.RootPaths
 import com.vvfile.app.data.file.ShellFileOperator
 import com.vvfile.app.data.prefs.PrefsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class VVFileApp : Application() {
+    /** 应用级作用域：进程活多久就活多久，不随任何界面销毁。 */
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         ServiceLocator.init(this)
@@ -25,6 +35,18 @@ class VVFileApp : Application() {
         Thumbnails.init(this)
         // 语法高亮：assets/syntax 下的 VS Code 语法按需加载
         GrammarRegistry.init(this)
+        // 「发送到电脑」先在后台找一次电脑：等用户点开面板时结果已经就绪
+        appScope.launch { warmUpPc() }
+    }
+
+    private suspend fun warmUpPc() {
+        runCatching {
+            val settings = ServiceLocator.prefs.settings.first()
+            val cached = settings.pcHost?.let { host ->
+                PcTarget(host, settings.pcPort.takeIf { it > 0 } ?: PcTarget.DEFAULT_PORT)
+            }
+            PcDiscovery.warmUp(cached)
+        }
     }
 }
 

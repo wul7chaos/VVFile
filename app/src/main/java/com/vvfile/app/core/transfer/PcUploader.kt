@@ -64,7 +64,11 @@ object PcUploader {
             connection.disconnect()
             if (code in 200..299) {
                 val dir = match(JSON_DIR, body)?.let { unescape(it) }
-                PcResult(true, dir?.let { "连上了，电脑保存到 $it" } ?: "连上了")
+                PcResult(
+                    ok = true,
+                    message = dir?.let { "连上了，电脑保存到 $it" } ?: "连上了",
+                    dir = dir,
+                )
             } else {
                 PcResult(false, "电脑端返回 $code")
             }
@@ -249,4 +253,5 @@ object PcUploader {
     private val JSON_DIR = Regex("\"dir\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
     private val JSON_ERROR = Regex("\"error\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"")
 }
+
 

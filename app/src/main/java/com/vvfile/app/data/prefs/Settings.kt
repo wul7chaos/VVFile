@@ -31,6 +31,9 @@ data class Settings(
     val rootPolicy: RootPolicy = RootPolicy.AUTO,
     /** 首次启动的使用协议是否已同意；未同意时只显示协议页。 */
     val agreementAccepted: Boolean = false,
+    /** 上次成功连上的电脑（发送到电脑）：下次先试它，省一轮扫描。 */
+    val pcHost: String? = null,
+    val pcPort: Int = 0,
 ) {
     companion object {
         val DEFAULT: Settings = Settings()
@@ -68,6 +71,8 @@ data class Settings(
             restoreLastPath: Boolean? = null,
             rootPolicyKey: String? = null,
             agreementAccepted: Boolean? = null,
+            pcHost: String? = null,
+            pcPort: Int? = null,
         ): Settings = Settings(
             theme = themeFromKey(themeKey),
             dualPane = dualPane ?: DEFAULT.dualPane,
@@ -85,6 +90,8 @@ data class Settings(
             restoreLastPath = restoreLastPath ?: DEFAULT.restoreLastPath,
             rootPolicy = rootPolicyFromKey(rootPolicyKey),
             agreementAccepted = agreementAccepted ?: DEFAULT.agreementAccepted,
+            pcHost = normalizeStartPath(pcHost),
+            pcPort = (pcPort ?: 0).coerceIn(0, 65535),
         )
 
         /** 空白路径等价于"使用默认启动目录"。 */

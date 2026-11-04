@@ -102,4 +102,63 @@ class PcDiscoveryTest {
         assertTrue(PcDiscovery.unicastSweep("fe80::1", 64).isEmpty())
         assertTrue(PcDiscovery.unicastSweep(null, 24).isEmpty())
     }
+
+    /** 假的 HTTP 接收器：只回一个 /ping 的 JSON，用来验证「缓存命中不去扫描」。 */
+    private class FakeHttp(private val reply: String) : AutoCloseable {
+        private val server = java.net.ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
+        val port: Int get() = server.localPort
+        val worker = thread(isDaemon = true) {
+            runCatching {
+                server.accept().use { socket ->
+                    val input = socket.getInputStream()
+                    val buffer = ByteArray(1024)
+                    runCatching { input.read(buffer) }
+                    val body = reply.toByteArray(Charsets.UTF_8)
+                    val head = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n" +
+                        "Content-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                    socket.getOutputStream().apply {
+                        write(head.toByteArray(Charsets.ISO_8859_1))
+                        write(body)
+                        flush()
+                    }
+                }
+            }
+        }
+
+        override fun close() = server.close()
+    }
+
+    @Test
+    fun `缓存里的电脑还能连上就直接用，不再扫描`() = runBlocking {
+        FakeHttp("{\"ok\":true,\"app\":\"vvfile-receiver\",\"dir\":\"E:\\\\VVFile\"}").use { fake ->
+            val cached = PcTarget("127.0.0.1", fake.port)
+            val found = PcDiscovery.connect(
+                cached = cached,
+                pingTimeoutMs = 2_000,
+                timeoutMs = 200,
+                // 真扫描的话这里没人应答，能证明结果是缓存命中的
+                targets = listOf(InetAddress.getByName("127.0.0.1")),
+            )
+            fake.worker.join(2_000)
+            assertEquals(cached, found?.target)
+            assertEquals("E:\\VVFile", found?.dir)
+        }
+    }
+
+    @Test
+    fun `缓存里的电脑连不上就退回扫描`() = runBlocking {
+        // 缓存指向一个没人监听的端口，扫描打到本地假接收器
+        val deadPort = java.net.ServerSocket(0).use { it.localPort }
+        FakeDiscovery("{\"ok\":true,\"app\":\"vvfile-receiver\",\"port\":7717}").use { fake ->
+            val found = PcDiscovery.connect(
+                cached = PcTarget("127.0.0.1", deadPort),
+                pingTimeoutMs = 400,
+                port = fake.port,
+                timeoutMs = 2_000,
+                targets = listOf(InetAddress.getByName("127.0.0.1")),
+            )
+            assertTrue(found != null)
+            assertEquals(7717, found!!.target.port)
+        }
+    }
 }

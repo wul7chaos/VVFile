@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.vvfile.app.core.format.SizeFormatter
 import com.vvfile.app.core.transfer.PcDiscovery
 import com.vvfile.app.core.transfer.PcOutbox
+import com.vvfile.app.core.transfer.PcTarget
 import com.vvfile.app.core.transfer.PcUploader
 import com.vvfile.app.ui.theme.VVDanger
 import com.vvfile.app.ui.theme.VVWarn
@@ -53,6 +54,10 @@ private data class SendOutcome(val name: String, val ok: Boolean, val detail: St
 @Composable
 fun SendToPcDialog(
     paths: List<String>,
+    /** 上次连上的电脑；有就先 ping 它，不用每次重新扫描。 */
+    cachedTarget: PcTarget?,
+    /** 新找到/确认可用的电脑，交出去落盘，下次直接用。 */
+    onRemember: (PcTarget) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sources = remember(paths) { paths.map { File(it) } }
@@ -77,18 +82,21 @@ fun SendToPcDialog(
     }
     val failed = results.count { !it.ok }
 
-    suspend fun find(silent: Boolean) {
+    /** [useCache]=true 时先试上次那台电脑；「重新搜索」传 false 强制重扫。 */
+    suspend fun find(silent: Boolean, useCache: Boolean = true) {
         searching = true
         if (!silent) searchMessage = "正在找同一 WiFi 下的电脑…"
         found = null
-        val hit = PcDiscovery.discover()
+        val hit = PcDiscovery.connect(if (useCache) cachedTarget else null)
         found = hit
         searching = false
-        searchMessage = if (hit == null) {
-            "没找到电脑端。确认电脑上的 VVFile 接收器在跑，两边连同一个 WiFi（热点也行）"
-        } else {
-            "已找到电脑" + (hit.dir?.let { "，保存到 $it" } ?: "")
+        val reused = useCache && hit != null && cachedTarget != null && hit.target == cachedTarget
+        searchMessage = when {
+            hit == null -> "没找到电脑端。确认电脑上的 VVFile 接收器在跑，两边连同一个 WiFi（热点也行）"
+            reused -> "已连上次的电脑 ${hit.target.authority}" + (hit.dir?.let { "，保存到 $it" } ?: "")
+            else -> "已找到电脑 ${hit.target.authority}" + (hit.dir?.let { "，保存到 $it" } ?: "")
         }
+        hit?.let { onRemember(it.target) }
     }
 
     fun send() {
@@ -145,8 +153,19 @@ fun SendToPcDialog(
         }
     }
 
-    // 打开面板就先找一次；找到不自动发，让人看一眼清单再点「发送」
-    LaunchedEffect(paths) { find(silent = false) }
+    // 应用启动时已经找过一次：命中就立刻显示，省掉这段等待
+    LaunchedEffect(paths) {
+        val ready = PcDiscovery.peek()
+        if (ready != null) {
+            found = ready
+            searching = false
+            searchMessage = "已找到电脑 ${ready.target.authority}" +
+                (ready.dir?.let { "，保存到 $it" } ?: "")
+            onRemember(ready.target)
+        } else {
+            find(silent = false)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = { if (!sending) onDismiss() },
@@ -307,7 +326,7 @@ fun SendToPcDialog(
                     }
                 } else {
                     TextButton(
-                        onClick = { scope.launch { find(silent = false) } },
+                        onClick = { scope.launch { find(silent = false, useCache = false) } },
                         enabled = !searching,
                     ) {
                         Text(if (searching) "搜索中…" else "重新搜索", fontSize = 13.sp)
@@ -351,3 +370,4 @@ private fun ResultLine(name: String, detail: String, danger: Boolean = false) {
 }
 
 private const val RESULT_LINES = 40
+

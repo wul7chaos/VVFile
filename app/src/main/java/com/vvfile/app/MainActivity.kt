@@ -55,6 +55,7 @@ import com.vvfile.app.feature.media.MediaKind
 import com.vvfile.app.feature.media.VideoPlayerScreen
 import com.vvfile.app.feature.onboarding.AgreementScreen
 import com.vvfile.app.feature.settings.SettingsScreen
+import com.vvfile.app.core.transfer.PcTarget
 import com.vvfile.app.feature.transfer.SendToPcDialog
 import com.vvfile.app.feature.terminal.TerminalScreen
 import com.vvfile.app.ui.theme.AccentPresets
@@ -382,6 +383,16 @@ class MainActivity : ComponentActivity() {
                         if (paths.isNotEmpty()) {
                             SendToPcDialog(
                                 paths = paths,
+                                // 上次连上的电脑（有就先 ping 它，省一轮扫描）
+                                cachedTarget = settings.pcHost?.let { host ->
+                                    PcTarget(host, settings.pcPort.takeIf { it > 0 } ?: PcTarget.DEFAULT_PORT)
+                                },
+                                onRemember = { target ->
+                                    lifecycleScope.launch {
+                                        PrefsRepository.get(this@MainActivity)
+                                            .setPcTarget(target.host, target.port)
+                                    }
+                                },
                                 onDismiss = { sendPaths = null },
                             )
                         } else {
@@ -448,4 +459,5 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SEND_TO_PC_PATHS = "com.vvfile.app.extra.SEND_TO_PC_PATHS"
     }
 }
+
 

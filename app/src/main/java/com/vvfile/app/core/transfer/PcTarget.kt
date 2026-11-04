@@ -20,4 +20,7 @@ data class PcResult(
     val message: String,
     /** 电脑端回报的落地路径（只有上传成功时才有）。 */
     val savedPath: String? = null,
+    /** `GET /ping` 回报的接收目录，用来在面板上显示「保存到 …」。 */
+    val dir: String? = null,
 )
+
