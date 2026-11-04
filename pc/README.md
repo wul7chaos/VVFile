@@ -38,6 +38,7 @@ VvFileReceiver.exe --send [文件或文件夹...]
 - **托盘菜单**：打开接收文件夹 / 复制本机地址（备用）/ 手机端怎么用 / 打开日志 / 退出。
 - **开机自启**：写 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 的 `VVFileReceiver` 值；`--uninstall` 可撤销。
 - **单实例**：同一端口只跑一个，重复启动会安静退出。
+- **图标**：exe、托盘、窗口标题栏都用手机端同一套图标（`pc/VvFileReceiver/app.ico`，紫底 + 白色 VV 文件夹，16–256 多尺寸，由 `res/mipmap-*/ic_launcher_foreground.png` + 启动图渐变合成）。
 - **发送到手机**：主窗口（`--send` 或托盘菜单打开）支持拖放/多选，协议与手机端一致，只是方向反过来（`PUT /dir`、`PUT /upload`，端口 7718）。
 
 ## 命令行

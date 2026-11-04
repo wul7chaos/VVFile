@@ -46,8 +46,17 @@ if (-not (Test-Path $csc)) { throw '找不到 csc.exe（需要 .NET Framework 4.
 
 Write-Host "编译 -> $exe"
 $sources = Get-ChildItem -Path $scriptDir -Filter *.cs | ForEach-Object { $_.FullName }
-& $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:"$exe" `
-    /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll $sources
+$ico = Join-Path $scriptDir 'app.ico'
+if (-not (Test-Path $ico)) { throw "缺少图标文件 app.ico" }
+$cscArgs = @(
+    '/nologo', '/target:winexe', '/platform:anycpu', '/optimize+',
+    ("/out:" + $exe),
+    ("/win32icon:" + $ico),
+    ("/resource:" + $ico + ",VvFileReceiver.app.ico"),
+    '/r:System.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll'
+)
+$cscArgs += $sources
+& $csc $cscArgs
 if ($LASTEXITCODE -ne 0) { throw "编译失败（exit $LASTEXITCODE）" }
 
 Write-Host "完成：$exe"

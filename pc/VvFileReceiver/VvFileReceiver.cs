@@ -333,7 +333,7 @@ namespace VvFileReceiver
             Log.Write(string.Format("开始监听 0.0.0.0:{0}，接收目录 {1}", opts.Port, opts.Dir));
 
             _tray = new NotifyIcon();
-            _tray.Icon = SystemIcons.Application;
+            _tray.Icon = AppIcon.Tray;
             _tray.Text = "VVFile 接收器 · 端口 " + opts.Port;
             _tray.ContextMenuStrip = BuildMenu();
             _tray.DoubleClick += delegate { OpenFolder(); };

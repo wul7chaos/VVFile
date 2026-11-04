@@ -37,6 +37,7 @@ namespace VvFileReceiver
             MinimumSize = new Size(680, 520);
             Size = new Size(760, 600);
             Font = new Font("Microsoft YaHei UI", 9f);
+            Icon = AppIcon.Window;
             BackColor = Color.FromArgb(32, 32, 36);
             ForeColor = Color.Gainsboro;
 
@@ -586,6 +587,7 @@ namespace VvFileReceiver
         }
     }
 }
+
 
 
 
