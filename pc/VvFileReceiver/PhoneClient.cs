@@ -130,7 +130,12 @@ namespace VvFileReceiver
             headers["X-VV-Name"] = Encode(Path.GetFileName(localPath));
             headers["X-VV-Size"] = info.Length.ToString(CultureInfo.InvariantCulture);
             headers["X-VV-Mtime"] = info.LastWriteTimeUtc.ToString("o", CultureInfo.InvariantCulture);
-            return Request(target, "PUT", "/upload", headers, new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read), onBytes, 300000);
+            // 一定要 using：传进去的是 FileStream，忘了释放会让文件在发送完之后仍被占用，
+            // 用户在资源管理器里改名/删除就会「文件正在使用」。
+            using (FileStream stream = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                return Request(target, "PUT", "/upload", headers, stream, onBytes, 300000);
+            }
         }
 
         private static string Request(PhoneTarget target, string method, string path,
@@ -147,7 +152,9 @@ namespace VvFileReceiver
             {
                 client.SendTimeout = timeoutMs;
                 client.ReceiveTimeout = timeoutMs;
-                client.Connect(target.Host, target.Port);
+                // 有上限的连接：对方不在线时 Connect 会按系统超时（可能十几秒）干等，
+                // 扫描本网段时会把整轮拖到几十秒，这里自己卡时间。
+                Connect(client, target.Host, target.Port, timeoutMs);
 
                 long length = 0;
                 if (body != null && body.CanSeek) length = body.Length;
@@ -186,6 +193,19 @@ namespace VvFileReceiver
                 using (StreamReader reader = new StreamReader(network, Encoding.UTF8))
                     return reader.ReadToEnd();
             }
+        }
+
+        /// <summary>带超时的连接；超时抛 TimeoutException，调用方按「连不上」处理。</summary>
+        private static void Connect(TcpClient client, string host, int port, int timeoutMs)
+        {
+            IAsyncResult pending = client.BeginConnect(host, port, null, null);
+            if (!pending.AsyncWaitHandle.WaitOne(timeoutMs))
+            {
+                try { client.Close(); }
+                catch { }
+                throw new TimeoutException("连接 " + host + ":" + port + " 超时（" + timeoutMs + " ms）");
+            }
+            client.EndConnect(pending);
         }
 
         private static List<string> Candidates(string lastHost)
@@ -364,4 +384,5 @@ namespace VvFileReceiver
         }
     }
 }
+
 
