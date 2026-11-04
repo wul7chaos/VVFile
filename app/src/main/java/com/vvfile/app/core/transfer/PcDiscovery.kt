@@ -50,29 +50,32 @@ object PcDiscovery {
         }
         if (destinations.isEmpty()) return@withContext null
 
-        DatagramSocket().use { socket ->
-            socket.broadcast = true
-            socket.soTimeout = 200
-            val payload = PROBE.toByteArray(Charsets.UTF_8)
-            destinations.distinct().forEach { address ->
-                runCatching {
-                    socket.send(DatagramPacket(payload, payload.size, InetSocketAddress(address, port)))
+        // 某些系统/网络下广播或建 socket 会直接抛（无 WiFi、权限、路由），都当成「没找到」
+        runCatching {
+            DatagramSocket().use { socket ->
+                socket.broadcast = true
+                socket.soTimeout = 200
+                val payload = PROBE.toByteArray(Charsets.UTF_8)
+                destinations.distinct().forEach { address ->
+                    runCatching {
+                        socket.send(DatagramPacket(payload, payload.size, InetSocketAddress(address, port)))
+                    }
                 }
-            }
 
-            val deadline = System.currentTimeMillis() + timeoutMs
-            val buffer = ByteArray(2048)
-            while (System.currentTimeMillis() < deadline) {
-                val packet = DatagramPacket(buffer, buffer.size)
-                val got = runCatching { socket.receive(packet); true }.getOrDefault(false)
-                if (!got) continue
-                val text = String(packet.data, 0, packet.length, Charsets.UTF_8)
-                if (!text.contains(APP_TAG)) continue
-                val host = packet.address?.hostAddress ?: continue
-                val replyPort = JSON_PORT.find(text)?.groupValues?.get(1)?.toIntOrNull() ?: port
-                val dir = JSON_DIR.find(text)?.groupValues?.get(1)
-                    ?.let { PcUploader.unescape(it) }
-                return@withContext Found(PcTarget(host, replyPort), dir)
+                val deadline = System.currentTimeMillis() + timeoutMs
+                val buffer = ByteArray(2048)
+                while (System.currentTimeMillis() < deadline) {
+                    val packet = DatagramPacket(buffer, buffer.size)
+                    val got = runCatching { socket.receive(packet); true }.getOrDefault(false)
+                    if (!got) continue
+                    val text = String(packet.data, 0, packet.length, Charsets.UTF_8)
+                    if (!text.contains(APP_TAG)) continue
+                    val host = packet.address?.hostAddress ?: continue
+                    val replyPort = JSON_PORT.find(text)?.groupValues?.get(1)?.toIntOrNull() ?: port
+                    val dir = JSON_DIR.find(text)?.groupValues?.get(1)
+                        ?.let { PcUploader.unescape(it) }
+                    return@withContext Found(PcTarget(host, replyPort), dir)
+                }
             }
         }
         null
