@@ -345,7 +345,8 @@ namespace VvFileReceiver
                     catch { }
                 },
                 delegate(Action work) { _ui.Post(delegate { work(); }, null); });
-            _tray.DoubleClick += delegate { OpenFolder(); };
+            // 双击托盘直接开「发送到手机」，这是最常用的入口
+            _tray.DoubleClick += delegate { ShowSendForm(); };
             _tray.Visible = true;
 
             Thread worker = new Thread(ServeLoop);
