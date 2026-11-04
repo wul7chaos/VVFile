@@ -381,33 +381,6 @@ namespace VvFileReceiver
             sendToPhone.Click += delegate { ShowSendForm(); };
             menu.Items.Add(sendToPhone);
 
-            ToolStripMenuItem copy = new ToolStripMenuItem("复制本机地址（备用）");
-            copy.Click += delegate
-            {
-                try
-                {
-                    Clipboard.SetText(string.Format("{0}:{1}", BestAddress(), _opts.Port));
-                    Notify("地址已复制", string.Format("{0}:{1}", BestAddress(), _opts.Port));
-                }
-                catch (Exception ex)
-                {
-                    Log.Write("复制地址失败：" + ex.Message);
-                }
-            };
-            menu.Items.Add(copy);
-
-            ToolStripMenuItem help = new ToolStripMenuItem("手机端怎么用");
-            help.Click += delegate
-            {
-                MessageBox.Show(
-                    "1. 手机长按文件 → 发送到电脑；或别的应用里「打开方式」选「发送到电脑」。\r\n" +
-                    "2. 手机和电脑连同一个 WiFi，手机会自动发现这台电脑。\r\n" +
-                    "3. 不用填 IP，也没有口令；地址一般不用管（备用：" + BestAddress() + ":" + _opts.Port + "）。\r\n\r\n" +
-                    "接收目录：" + _opts.Dir + "\r\n" +
-                    "日志：" + Log.Path,
-                    "VVFile 接收器", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            };
-            menu.Items.Add(help);
 
             ToolStripMenuItem logItem = new ToolStripMenuItem("打开日志");
             logItem.Click += delegate
@@ -492,32 +465,6 @@ namespace VvFileReceiver
                 {
                 }
             }, null);
-        }
-
-        /** 找一个像样的局域网地址给用户照着填；找不到就用主机名。 */
-        private static string BestAddress()
-        {
-            try
-            {
-                string fallback = null;
-                foreach (IPAddress ip in Dns.GetHostAddresses(Dns.GetHostName()))
-                {
-                    if (ip.AddressFamily != AddressFamily.InterNetwork) continue;
-                    byte[] b = ip.GetAddressBytes();
-                    if (b[0] == 127) continue;
-                    // 常见私网段优先，虚拟网卡（169.254）最后
-                    if (b[0] == 192 && b[1] == 168) return ip.ToString();
-                    if (b[0] == 10) { if (fallback == null) fallback = ip.ToString(); }
-                    if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) { if (fallback == null) fallback = ip.ToString(); }
-                    if (fallback == null && !(b[0] == 169 && b[1] == 254)) fallback = ip.ToString();
-                }
-                if (fallback != null) return fallback;
-                return Dns.GetHostName();
-            }
-            catch
-            {
-                return "127.0.0.1";
-            }
         }
 
         private void ServeLoop()
