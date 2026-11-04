@@ -1,6 +1,7 @@
 package com.vvfile.app.core.shell
 
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
@@ -43,7 +44,7 @@ class ShellExecutor(
         timeoutMs: Long,
     ): ShellResult = withContext(Dispatchers.IO) {
         val argv = if (asRoot) {
-            arrayOf(SU_BINARY, "-c", command)
+            arrayOf(suBinary(), "-c", namespacePrefix() + command)
         } else {
             arrayOf(SH_BINARY, "-c", command)
         }
@@ -147,6 +148,41 @@ class ShellExecutor(
         private const val SU_BINARY = "su"
 
         /**
+         * 应用进程看到的是**自己的**挂载命名空间：`/data/data` 被换成只含本应用的精简 tmpfs，
+         * 别人的 `/data/data/<pkg>`、`/storage/emulated/0/Android/data/<pkg>` 在这里都是 ENOENT——
+         * 连 `su` 也一样，因为 su 也活在这个命名空间里。
+         *
+         * 用 `nsenter -t 1 -m` 切到 init 的命名空间后再执行命令，看到的就和 adb shell 里一致。
+         */
+        private const val NAMESPACE_PREFIX = "nsenter -t 1 -m -- "
+
+        /** 有 nsenter（toybox 自带）才切换命名空间，老设备上退回普通 su。 */
+        fun namespacePrefix(): String =
+            if (runCatching { File(NSENTER_BINARY).exists() }.getOrDefault(false)) NAMESPACE_PREFIX else ""
+
+        private const val NSENTER_BINARY = "/system/bin/nsenter"
+
+        /**
+         * su 的候选位置。
+         *
+         * 应用进程拿到的 PATH 不保证包含 `/system/bin`，只写 "su" 会得到
+         * `Cannot run program "su": error=2, No such file or directory`；
+         * 这条 stderr 又会被上层当成「路径不存在」，表现为文件像是没了。所以先按绝对路径找。
+         */
+        private val SU_CANDIDATES = listOf(
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/sbin/su",
+            "/su/bin/su",
+            "/debug_ramdisk/su",
+        )
+
+        /** 找得到绝对路径的 su 就用绝对路径，否则退回 PATH 里的 "su"。 */
+        fun suBinary(): String =
+            SU_CANDIDATES.firstOrNull { runCatching { File(it).exists() }.getOrDefault(false) }
+                ?: SU_BINARY
+
+        /**
          * 用单引号包裹任意字符串，供拼接进 `sh -c` / `su -c` 命令。
          *
          * 单引号内除了 `'` 本身没有特殊字符，因此把 `'` 替换为 `'\''`
@@ -188,3 +224,4 @@ internal class OutputBudget(private val limitBytes: Int) {
         return granted
     }
 }
+
