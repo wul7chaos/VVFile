@@ -411,7 +411,8 @@ namespace VvFileReceiver
                 }
                 if (target == null)
                 {
-                    Report("没找到手机。确认 VVFile 在手机上开着（通知栏有「正在接收电脑发来的文件」），两边连同一个 WiFi。");
+                    Report("没找到手机。确认 VVFile 在手机上开着（通知栏有「正在接收电脑发来的文件」），两边连同一个 WiFi。\r\n\r\n" +
+                        "另外：不少手机息屏后会限制后台联网（真机实测过），锁屏状态下可能连不上——点亮一下屏幕再点发送试试。");
                     return;
                 }
                 _phone = target;
@@ -587,6 +588,7 @@ namespace VvFileReceiver
         }
     }
 }
+
 
 
 

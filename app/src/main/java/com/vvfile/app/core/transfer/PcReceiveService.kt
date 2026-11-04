@@ -10,8 +10,10 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Environment
+import android.net.wifi.WifiManager
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import android.os.PowerManager
 import androidx.core.app.ServiceCompat
 import com.vvfile.app.MainActivity
 import com.vvfile.app.R
@@ -28,6 +30,8 @@ class PcReceiveService : Service() {
 
     private var server: PcReceiveServer? = null
     private var received = 0
+    private var wifiLock: WifiManager.WifiLock? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -36,6 +40,7 @@ class PcReceiveService : Service() {
         createChannel()
         startForeground(NOTIFICATION_ID, buildNotification("正在接收电脑发来的文件", "保存到 ${root().absolutePath}"), type())
         running = true
+        holdLocks()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -61,6 +66,7 @@ class PcReceiveService : Service() {
 
     override fun onDestroy() {
         server?.stop()
+        releaseLocks()
         server = null
         running = false
         super.onDestroy()
@@ -70,6 +76,39 @@ class PcReceiveService : Service() {
         received += 1
         val relative = PcServerPaths.relative(root(), file)
         notify("已收到 $relative", "共 $received 个文件 · ${root().absolutePath}")
+    }
+
+    /**
+     * 锁屏也要能收：屏幕一关，系统会让 CPU 进休眠、Wi-Fi 进省电（真机上实测过：
+     * 关屏 15 秒后电脑就连不上 7718 了，但进程和服务都还在）。
+     * 刷一个 PARTIAL_WAKE_LOCK 保住 CPU，再刷 WIFI_MODE_FULL_HIGH_PERF 让 Wi-Fi 不做省电休眠。
+     */
+    @Suppress("DEPRECATION")
+    private fun holdLocks() {
+        runCatching {
+            val wifi = applicationContext.getSystemService(WifiManager::class.java)
+            wifiLock = wifi?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "$LOCK_TAG:wifi")
+                ?.apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+        }.onFailure { android.util.Log.w(TAG, "拿 Wi-Fi 锁失败：${it.message}") }
+
+        runCatching {
+            val power = getSystemService(PowerManager::class.java)
+            wakeLock = power?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$LOCK_TAG:cpu")
+                ?.apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+        }.onFailure { android.util.Log.w(TAG, "拿 CPU 锁失败：${it.message}") }
+    }
+
+    private fun releaseLocks() {
+        runCatching { wifiLock?.takeIf { it.isHeld }?.release() }
+        wifiLock = null
+        runCatching { wakeLock?.takeIf { it.isHeld }?.release() }
+        wakeLock = null
     }
 
     private fun root(): File {
@@ -133,6 +172,7 @@ class PcReceiveService : Service() {
 
     companion object {
         private const val TAG = "VVFileReceive"
+        private const val LOCK_TAG = "vvfile-receive"
         private const val CHANNEL_ID = "vvfile_receive"
         private const val NOTIFICATION_ID = 7718
         const val ACTION_STOP = "com.vvfile.app.action.STOP_RECEIVE"
