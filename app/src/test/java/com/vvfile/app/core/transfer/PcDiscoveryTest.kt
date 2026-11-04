@@ -76,4 +76,30 @@ class PcDiscoveryTest {
             assertNull(found)
         }
     }
+
+    @Test
+    fun `子网扫描覆盖本网段、跳过自己和广播地址`() {
+        val hosts = PcDiscovery.unicastSweep("192.168.32.119", 24).map { it.hostAddress }
+        assertEquals(253, hosts.size)
+        assertTrue(hosts.contains("192.168.32.200"))
+        assertTrue(!hosts.contains("192.168.32.119"))
+        assertTrue(!hosts.contains("192.168.32.255"))
+        assertTrue(!hosts.contains("192.168.32.0"))
+    }
+
+    @Test
+    fun `前缀更长时只扫自己那半个网段`() {
+        // 10.0.0.200/25 → 本机在 128..254 这半边，扫 129..253
+        val hosts = PcDiscovery.unicastSweep("10.0.0.200", 25).map { it.hostAddress }
+        assertTrue(hosts.size in 120..130)
+        assertTrue(!hosts.contains("10.0.0.128"))
+        assertTrue(!hosts.contains("10.0.0.200"))
+        assertTrue(hosts.all { it.startsWith("10.0.0.") })
+    }
+
+    @Test
+    fun `地址不合法时给空表`() {
+        assertTrue(PcDiscovery.unicastSweep("fe80::1", 64).isEmpty())
+        assertTrue(PcDiscovery.unicastSweep(null, 24).isEmpty())
+    }
 }

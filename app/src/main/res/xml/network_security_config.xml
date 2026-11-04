@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  发送到电脑走局域网明文 HTTP：电脑端是 pc/ 里自写的接收器，没有证书，也不该为此上 TLS。
+  只放行明文，不做额外收窄——手机端连的地址是运行时发现的（同一 WiFi 内的电脑）。
+  其余网络请求（如果有）同样落在这条规则下，所以这里只声明「允许明文」这一件事。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
