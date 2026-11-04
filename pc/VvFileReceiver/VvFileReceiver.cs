@@ -310,6 +310,7 @@ namespace VvFileReceiver
         private readonly Options _opts;
         private readonly NotifyIcon _tray;
         private SendToPhoneForm _sendForm;
+        private FileNoticeBatch _fileNotices;
         private readonly SynchronizationContext _ui;
         private readonly TcpListener _listener;
         private Discovery _discovery;
@@ -336,6 +337,14 @@ namespace VvFileReceiver
             _tray.Icon = AppIcon.Tray;
             _tray.Text = "VVFile 接收器 · 端口 " + opts.Port;
             _tray.ContextMenuStrip = BuildMenu();
+            // 批量收文件时把通知攒一下，避免一个文件一条横幅
+            _fileNotices = new FileNoticeBatch(
+                delegate(string title, string text)
+                {
+                    try { _tray.ShowBalloonTip(4000, title, text, ToolTipIcon.Info); }
+                    catch { }
+                },
+                delegate(Action work) { _ui.Post(delegate { work(); }, null); });
             _tray.DoubleClick += delegate { OpenFolder(); };
             _tray.Visible = true;
 
@@ -419,6 +428,8 @@ namespace VvFileReceiver
             ToolStripMenuItem exit = new ToolStripMenuItem("退出");
             exit.Click += delegate
             {
+                try { if (_fileNotices != null) _fileNotices.Dispose(); }
+                catch { }
                 try { if (_discovery != null) _discovery.Dispose(); }
                 catch { }
                 try { _listener.Stop(); }
@@ -659,7 +670,7 @@ namespace VvFileReceiver
                     final, SizeText(received), SpeedText(received, started),
                     (DateTime.Now - started).TotalSeconds));
 
-                Notify("收到文件", RelativeShown(final) + "\r\n" + SizeText(received));
+                _fileNotices.Add(RelativeShown(final), received);
 
                 WriteJson(ns, 200, string.Format(
                     "{{\"ok\":true,\"path\":{0},\"bytes\":{1},\"renamed\":{2}}}",
