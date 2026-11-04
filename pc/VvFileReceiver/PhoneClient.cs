@@ -40,7 +40,90 @@ namespace VvFileReceiver
         public const int DefaultPort = 7718;
         private const string Probe = "VVFILE?DISCOVER=1";
 
-        /// <summary>找同一局域网里的手机端。找不到返回 null。</summary>
+        /// <summary>找同一局域网里的全部手机端/平板端（可能有多台）。</summary>
+        public static List<PhoneTarget> DiscoverAll(int port, int timeoutMs, string lastHost)
+        {
+            List<PhoneTarget> hits = new List<PhoneTarget>();
+            Dictionary<string, bool> seen = new Dictionary<string, bool>();
+            UdpClient udp = null;
+            try
+            {
+                udp = new UdpClient();
+                udp.EnableBroadcast = true;
+                udp.Client.ReceiveTimeout = 250;
+
+                byte[] payload = Encoding.UTF8.GetBytes(Probe);
+                foreach (string host in Candidates(lastHost))
+                {
+                    try
+                    {
+                        if (host == "255.255.255.255" || host.EndsWith(".255"))
+                            udp.Send(payload, payload.Length, new IPEndPoint(IPAddress.Broadcast, port));
+                        else
+                            udp.Send(payload, payload.Length, new IPEndPoint(IPAddress.Parse(host), port));
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                // 收一个时间窗内的所有回包，按 IP:端口 去重
+                DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+                while (DateTime.UtcNow < deadline)
+                {
+                    IPEndPoint from = new IPEndPoint(IPAddress.Any, 0);
+                    byte[] reply;
+                    try { reply = udp.Receive(ref from); }
+                    catch (SocketException) { continue; }
+                    PhoneTarget hit = Parse(reply, from.Address.ToString(), port);
+                    if (hit == null || seen.ContainsKey(hit.Authority)) continue;
+                    seen[hit.Authority] = true;
+                    hits.Add(hit);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Write("找设备失败：" + ex.Message);
+            }
+            finally
+            {
+                if (udp != null) try { udp.Close(); } catch { }
+            }
+
+            if (hits.Count == 0) hits = SweepAll(port);
+            Log.Write("发现设备 " + hits.Count + " 台" + (hits.Count > 0 ? "：" + Describe(hits) : ""));
+            return hits;
+        }
+
+        private static string Describe(List<PhoneTarget> hits)
+        {
+            StringBuilder text = new StringBuilder();
+            foreach (PhoneTarget hit in hits)
+            {
+                if (text.Length > 0) text.Append("、");
+                text.Append(hit.Label);
+            }
+            return text.ToString();
+        }
+
+        /// <summary>广播被路由器拦掉时，并行扫本网段，把所有应答都收下来。</summary>
+        private static List<PhoneTarget> SweepAll(int port)
+        {
+            List<string> hosts = Sweep();
+            List<PhoneTarget> hits = new List<PhoneTarget>();
+            object gate = new object();
+            System.Threading.Tasks.ParallelOptions options = new System.Threading.Tasks.ParallelOptions();
+            options.MaxDegreeOfParallelism = 32;
+            System.Threading.Tasks.Parallel.For(0, hosts.Count, options, delegate(int index)
+            {
+                PhoneTarget hit = Ping(new PhoneTarget { Host = hosts[index], Port = port, PingTimeoutMs = 250 });
+                if (hit == null) return;
+                lock (gate) { hits.Add(hit); }
+            });
+            return hits;
+        }
+
+        /// <summary>找同一局域网里的手机端（只要一台）。找不到返回 null。</summary>
         public static PhoneTarget Discover(int port, int timeoutMs, string lastHost)
         {
             List<string> hosts = Candidates(lastHost);
@@ -384,5 +467,6 @@ namespace VvFileReceiver
         }
     }
 }
+
 
 

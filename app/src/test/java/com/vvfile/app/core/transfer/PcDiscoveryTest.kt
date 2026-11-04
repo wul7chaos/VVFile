@@ -15,19 +15,27 @@ import org.junit.Test
  */
 class PcDiscoveryTest {
 
-    private class FakeDiscovery(private val reply: String) : AutoCloseable {
-        private val socket = DatagramSocket(0, InetAddress.getByName("127.0.0.1"))
+    private class FakeDiscovery(
+        private val reply: String,
+        bind: String = "127.0.0.1",
+        port: Int = 0,
+        private val rounds: Int = 1,
+    ) : AutoCloseable {
+        private val socket = DatagramSocket(port, InetAddress.getByName(bind))
         val port: Int get() = socket.localPort
         var probe: String? = null
             private set
         val worker = thread(isDaemon = true) {
             runCatching {
                 val buffer = ByteArray(256)
-                val packet = DatagramPacket(buffer, buffer.size)
-                socket.receive(packet)
-                probe = String(packet.data, 0, packet.length, Charsets.UTF_8)
-                val bytes = reply.toByteArray(Charsets.UTF_8)
-                socket.send(DatagramPacket(bytes, bytes.size, packet.socketAddress))
+                repeat(rounds) {
+                    val packet = DatagramPacket(buffer, buffer.size)
+                    socket.receive(packet)
+                    probe = String(packet.data, 0, packet.length, Charsets.UTF_8)
+                    val bytes = reply.replace("__PORT__", socket.localPort.toString())
+                        .toByteArray(Charsets.UTF_8)
+                    socket.send(DatagramPacket(bytes, bytes.size, packet.socketAddress))
+                }
             }
         }
 
@@ -161,4 +169,44 @@ class PcDiscoveryTest {
             assertEquals(7717, found!!.target.port)
         }
     }
+
+    @Test
+    fun `多台电脑时全部收下、按地址去重`() = runBlocking {
+        val replyA = "{\"ok\":true,\"app\":\"vvfile-receiver\",\"port\":__PORT__,\"dir\":\"E:\\\\VVFile\"}"
+        val replyB = "{\"ok\":true,\"app\":\"vvfile-receiver\",\"port\":__PORT__,\"dir\":\"D:\\\\收\"}"
+        FakeDiscovery(replyA).use { a ->
+            FakeDiscovery(replyB, bind = "127.0.0.2", port = a.port).use { b ->
+                val all = PcDiscovery.discoverAll(
+                    port = a.port,
+                    timeoutMs = 1_200,
+                    targets = listOf(
+                        InetAddress.getByName("127.0.0.1"),
+                        InetAddress.getByName("127.0.0.2"),
+                    ),
+                )
+                a.worker.join(2_000)
+                b.worker.join(2_000)
+                assertEquals(2, all.size)
+                assertEquals(all.size, all.map { it.target.authority }.distinct().size)
+            }
+        }
+    }
+
+    @Test
+    fun `上次那台排在多设备列表最前`() = runBlocking {
+        val reply = "{\"ok\":true,\"app\":\"vvfile-receiver\",\"port\":__PORT__,\"dir\":\"E:\\\\VVFile\"}"
+        FakeDiscovery(reply).use { fake ->
+            val cached = PcTarget("127.0.0.1", fake.port)
+            val all = PcDiscovery.connectAll(
+                cached = cached,
+                port = fake.port,
+                timeoutMs = 1_200,
+                targets = listOf(InetAddress.getByName("127.0.0.1")),
+            )
+            fake.worker.join(2_000)
+            assertTrue(all.isNotEmpty())
+            assertEquals(cached.authority, all.first().target.authority)
+        }
+    }
 }
+

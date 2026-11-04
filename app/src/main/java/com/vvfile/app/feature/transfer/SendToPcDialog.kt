@@ -1,4 +1,5 @@
 package com.vvfile.app.feature.transfer
+import androidx.compose.foundation.clickable
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,11 +10,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,6 +66,8 @@ fun SendToPcDialog(
 ) {
     val sources = remember(paths) { paths.map { File(it) } }
     var found by remember { mutableStateOf<PcDiscovery.Found?>(null) }
+    /** 局域网里发现的全部电脑；超过一台时面板上显示可选项。 */
+    var devices by remember { mutableStateOf<List<PcDiscovery.Found>>(emptyList()) }
     var searching by remember { mutableStateOf(true) }
     var searchMessage by remember { mutableStateOf("正在找同一 WiFi 下的电脑…") }
     var sending by remember { mutableStateOf(false) }
@@ -97,6 +103,14 @@ fun SendToPcDialog(
             else -> "已找到电脑 ${hit.target.authority}" + (hit.dir?.let { "，保存到 $it" } ?: "")
         }
         hit?.let { onRemember(it.target) }
+        // 顺手看看同一网络里还有没有别的电脑：有就给用户一个选择
+        if (hit != null) {
+            val all = runCatching { PcDiscovery.discoverAll() }.getOrDefault(emptyList())
+            if (all.size > 1) {
+                devices = all
+                searchMessage = "找到 ${all.size} 台电脑，选一台发送"
+            }
+        }
     }
 
     fun send() {
@@ -220,6 +234,62 @@ fun SendToPcDialog(
                     )
                 }
 
+                // 多台电脑时列出来选：默认选中的是刚才连上的那台
+                if (devices.size > 1) {
+                    Spacer(Modifier.height(6.dp))
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 132.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        devices.forEach { device ->
+                            val active = found?.target == device.target
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = !sending) {
+                                        found = device
+                                        searchMessage = "已选 ${device.target.authority}" +
+                                            (device.dir?.let { "，保存到 $it" } ?: "")
+                                        onRemember(device.target)
+                                    }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = active,
+                                    onClick = null,
+                                    modifier = Modifier.size(22.dp),
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = MaterialTheme.colorScheme.primary,
+                                        unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = device.target.authority,
+                                        fontSize = 12.sp,
+                                        color = if (active) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                    )
+                                    device.dir?.let {
+                                        Text(
+                                            text = "保存到 $it",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
                 Spacer(Modifier.height(6.dp))
@@ -326,7 +396,23 @@ fun SendToPcDialog(
                     }
                 } else {
                     TextButton(
-                        onClick = { scope.launch { find(silent = false, useCache = false) } },
+                        onClick = {
+                            scope.launch {
+                                searching = true
+                                searchMessage = "正在找同一 WiFi 下的电脑…"
+                                val all = PcDiscovery.connectAll(cachedTarget)
+                                devices = all
+                                found = all.firstOrNull()
+                                searching = false
+                                searchMessage = when {
+                                    all.isEmpty() -> "没找到电脑端。确认电脑上的 VVFile 接收器在跑，两边连同一个 WiFi（热点也行）"
+                                    all.size > 1 -> "找到 ${all.size} 台电脑，选一台发送"
+                                    else -> "已找到电脑 ${all.first().target.authority}" +
+                                        (all.first().dir?.let { "，保存到 $it" } ?: "")
+                                }
+                                all.firstOrNull()?.let { onRemember(it.target) }
+                            }
+                        },
                         enabled = !searching,
                     ) {
                         Text(if (searching) "搜索中…" else "重新搜索", fontSize = 13.sp)

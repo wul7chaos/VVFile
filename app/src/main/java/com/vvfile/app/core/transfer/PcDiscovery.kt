@@ -105,9 +105,21 @@ object PcDiscovery {
         port: Int = PORT,
         timeoutMs: Long = DEFAULT_TIMEOUT_MS,
         targets: List<InetAddress>? = null,
-    ): Found? = withContext(Dispatchers.IO) {
+    ): Found? = discoverAll(port, timeoutMs, targets).firstOrNull()
+
+    /**
+     * 找出局域网里**所有**在跑的电脑端（同一个 WiFi 下可能有多台：台式机 + 笔记本）。
+     *
+     * 广播 + 单播扫一遍，把回包按 `host:port` 去重收下来；结果顺序不保证，
+     * 由调用方决定默认用哪台（一般是上次那台排最前，见 [connectAll]）。
+     */
+    suspend fun discoverAll(
+        port: Int = PORT,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+        targets: List<InetAddress>? = null,
+    ): List<Found> = withContext(Dispatchers.IO) {
         val destinations = targets ?: probeAddresses()
-        if (destinations.isEmpty()) return@withContext null
+        if (destinations.isEmpty()) return@withContext emptyList()
 
         // 建 socket / 发广播在某些系统或网络环境下会直接抛（无 WiFi、权限、路由），一律当「没找到」
         val found = runCatching {
@@ -120,11 +132,53 @@ object PcDiscovery {
                         socket.send(DatagramPacket(payload, payload.size, InetSocketAddress(address, port)))
                     }
                 }
-                await(socket, port, timeoutMs)
+                collect(socket, port, timeoutMs)
             }
-        }.getOrNull()
-        if (found != null) remember(found)
+        }.getOrDefault(emptyList())
+        found.firstOrNull()?.let { remember(it) }
         found
+    }
+
+    /** 收下所有回包，按地址去重；同一台重复回只留第一条。 */
+    private fun collect(socket: DatagramSocket, fallbackPort: Int, timeoutMs: Long): List<Found> {
+        val hits = LinkedHashMap<String, Found>()
+        val deadline = System.currentTimeMillis() + timeoutMs
+        val buffer = ByteArray(2048)
+        while (System.currentTimeMillis() < deadline) {
+            val packet = DatagramPacket(buffer, buffer.size)
+            if (!runCatching { socket.receive(packet); true }.getOrDefault(false)) continue
+            val text = String(packet.data, 0, packet.length, Charsets.UTF_8)
+            if (!text.contains(APP_TAG)) continue
+            val host = packet.address?.hostAddress ?: continue
+            val replyPort = JSON_PORT.find(text)?.groupValues?.get(1)?.toIntOrNull() ?: fallbackPort
+            val dir = JSON_DIR.find(text)?.groupValues?.get(1)?.let { PcUploader.unescape(it) }
+            val hit = Found(PcTarget(host, replyPort), dir)
+            hits.putIfAbsent(hit.target.authority, hit)
+        }
+        return hits.values.toList()
+    }
+
+    /**
+     * 多台电脑时的入口：缓存/上次那台排最前，其余按发现顺序跟上。
+     * 只找到一台就还是一台，界面不用弹选择。
+     */
+    suspend fun connectAll(
+        cached: PcTarget?,
+        port: Int = PORT,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+        targets: List<InetAddress>? = null,
+    ): List<Found> {
+        val all = discoverAll(port, timeoutMs, targets).toMutableList()
+        if (cached == null) return all
+        val index = all.indexOfFirst { it.target.host == cached.host && it.target.port == cached.port }
+        if (index > 0) {
+            val preferred = all.removeAt(index)
+            all.add(0, preferred)
+        } else if (index < 0) {
+            val ping = PcUploader.ping(cached, CACHED_PING_TIMEOUT_MS)
+            if (ping.ok) all.add(0, Found(cached, ping.dir))
+        }
+        return all
     }
 
     /** 收第一个像样的回包；超时就 null。 */

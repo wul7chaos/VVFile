@@ -25,9 +25,13 @@ namespace VvFileReceiver
         private readonly Button _clear;
         private readonly Button _remove;
         private readonly Button _find;
+        // 多设备：下拉框里列出局域网里所有手机/平板，选谁发给谁
+        private readonly ComboBox _devices;
+        private readonly List<PhoneTarget> _targets = new List<PhoneTarget>();
 
         private PhoneTarget _phone;
         private bool _sending;
+        private bool _filling;
         private static string _lastHost;
 
         public SendToPhoneForm()
@@ -42,6 +46,19 @@ namespace VvFileReceiver
             ForeColor = Color.Gainsboro;
 
             Panel top = new Panel { Dock = DockStyle.Top, Height = 44, Padding = new Padding(12, 8, 12, 4) };
+            _devices = new ComboBox
+            {
+                Dock = DockStyle.Right,
+                Width = 300,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(46, 46, 52),
+                ForeColor = Color.Gainsboro,
+            };
+            _devices.SelectedIndexChanged += delegate { OnDevicePicked(); };
+            _find = MakeButton("刷新设备", 96);
+            _find.Dock = DockStyle.Right;
+            _find.Click += delegate { FindPhoneAsync(); };
             _phoneLabel = new Label
             {
                 Dock = DockStyle.Fill,
@@ -49,10 +66,8 @@ namespace VvFileReceiver
                 TextAlign = ContentAlignment.MiddleLeft,
                 ForeColor = Color.Gainsboro,
             };
-            _find = MakeButton("查找手机", 96);
-            _find.Dock = DockStyle.Right;
-            _find.Click += delegate { FindPhoneAsync(); };
             top.Controls.Add(_phoneLabel);
+            top.Controls.Add(_devices);
             top.Controls.Add(_find);
 
             _drop = new Panel
@@ -340,24 +355,64 @@ namespace VvFileReceiver
 
         // ---------- 找手机 ----------
 
+        /// <summary>刷新设备列表：局域网里所有在应答的手机/平板。</summary>
         private void FindPhoneAsync()
         {
             if (_sending) return;
             _find.Enabled = false;
-            _phoneLabel.Text = "正在找手机…";
+            _devices.Enabled = false;
+            _phoneLabel.Text = "正在找设备…";
             Thread thread = new Thread(delegate()
             {
-                PhoneTarget hit = PhoneClient.Discover(PhoneClient.DefaultPort, 600, _lastHost);
+                List<PhoneTarget> hits = PhoneClient.DiscoverAll(PhoneClient.DefaultPort, 1200, _lastHost);
                 BeginInvoke((Action)delegate
                 {
                     _find.Enabled = true;
-                    _phone = hit;
-                    if (hit != null) _lastHost = hit.Host;
-                    RefreshPhoneLabel();
+                    _devices.Enabled = true;
+                    FillDevices(hits);
                 });
             });
             thread.IsBackground = true;
             thread.Start();
+        }
+
+        /// <summary>把发现的设备填进下拉框：优先选上次那台，其次保持当前选中的。</summary>
+        private void FillDevices(List<PhoneTarget> hits)
+        {
+            string wanted = _phone != null ? _phone.Authority : _lastHost;
+            _filling = true;
+            _targets.Clear();
+            _targets.AddRange(hits);
+            _devices.Items.Clear();
+            foreach (PhoneTarget hit in _targets) _devices.Items.Add(hit.Label);
+            int index = -1;
+            for (int i = 0; i < _targets.Count; i++)
+            {
+                if (wanted != null && _targets[i].Authority == wanted) { index = i; break; }
+                if (wanted != null && _targets[i].Host == wanted) { index = i; break; }
+            }
+            if (index < 0 && _targets.Count > 0) index = 0;
+            if (index >= 0) _devices.SelectedIndex = index;
+            _filling = false;
+
+            _phone = index >= 0 ? _targets[index] : null;
+            if (_phone != null)
+            {
+                _lastHost = _phone.Host;
+                SaveLastHost(_phone.Host);
+            }
+            RefreshPhoneLabel();
+        }
+
+        private void OnDevicePicked()
+        {
+            if (_filling) return;
+            int index = _devices.SelectedIndex;
+            if (index < 0 || index >= _targets.Count) return;
+            _phone = _targets[index];
+            _lastHost = _phone.Host;
+            SaveLastHost(_phone.Host);
+            RefreshPhoneLabel();
         }
 
         private void RefreshPhoneLabel()
@@ -407,7 +462,15 @@ namespace VvFileReceiver
                 {
                     // 没连过或手机换了 IP：现场找一遍，不用先点「查找手机」
                     BeginInvoke((Action)delegate { _status.Text = "正在找手机…"; });
-                    target = PhoneClient.Discover(PhoneClient.DefaultPort, 600, _lastHost);
+                    List<PhoneTarget> found = PhoneClient.DiscoverAll(PhoneClient.DefaultPort, 1200, _lastHost);
+                    if (found.Count > 1)
+                    {
+                        // 多台设备但没选过：交给界面列出来让用户选，这次先不发
+                        BeginInvoke((Action)delegate { FillDevices(found); });
+                        Report("发现 " + found.Count + " 台设备，先在右上角选一台再点发送。");
+                        return;
+                    }
+                    target = found.Count > 0 ? found[0] : null;
                 }
                 if (target == null)
                 {
@@ -588,6 +651,9 @@ namespace VvFileReceiver
         }
     }
 }
+
+
+
 
 
 
