@@ -10,6 +10,7 @@ import com.vvfile.app.core.shell.RootManager
 import com.vvfile.app.core.syntax.GrammarRegistry
 import com.vvfile.app.core.thumb.Thumbnails
 import com.vvfile.app.core.transfer.PcDiscovery
+import com.vvfile.app.core.transfer.PcReceiveService
 import com.vvfile.app.core.transfer.PcTarget
 import com.vvfile.app.data.file.FallbackFileOperator
 import com.vvfile.app.data.file.FileOperator
@@ -37,6 +38,8 @@ class VVFileApp : Application() {
         GrammarRegistry.init(this)
         // 「发送到电脑」先在后台找一次电脑：等用户点开面板时结果已经就绪
         appScope.launch { warmUpPc() }
+        // 「电脑 → 手机」：常驻接收服务，文件落到 Download/VVFile
+        runCatching { PcReceiveService.start(this) }
     }
 
     private suspend fun warmUpPc() {
@@ -83,3 +86,4 @@ object ServiceLocator {
         }
     }
 }
+

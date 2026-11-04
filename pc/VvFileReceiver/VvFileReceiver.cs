@@ -32,6 +32,9 @@ namespace VvFileReceiver
         public int Port = 7717;
         public bool Uninstall;
         public bool ShowHelp;
+        /** --send：直接打开「发送到手机」窗口；后面的非开关参数当作待发送路径。 */
+        public bool Send;
+        public readonly System.Collections.Generic.List<string> SendPaths = new System.Collections.Generic.List<string>();
 
         public static Options Parse(string[] args)
         {
@@ -52,6 +55,10 @@ namespace VvFileReceiver
                         }
                         break;
 
+                    case "--send":
+                        o.Send = true;
+                        break;
+
                     case "--uninstall":
                         o.Uninstall = true;
                         break;
@@ -59,6 +66,9 @@ namespace VvFileReceiver
                     case "--help":
                     case "/?":
                         o.ShowHelp = true;
+                        break;
+                    default:
+                        if (!args[i].StartsWith("-")) o.SendPaths.Add(args[i]);
                         break;
                 }
             }
@@ -68,6 +78,7 @@ namespace VvFileReceiver
         public const string HelpText =
             "VVFile 接收器\r\n\r\n" +
             "  --dir <目录>     接收目录，默认 E:\\VVFile\r\n" +
+            "  --send           直接打开「发送到手机」窗口（后面的路径会预填进列表）\r\n" +
             "  --port <端口>    监听端口，默认 7717\r\n" +
             "  --uninstall      取消开机启动并退出\r\n\r\n" +
             "启动后常驻托盘，收到文件会弹 Windows 通知。";
@@ -185,6 +196,16 @@ namespace VvFileReceiver
                 return;
             }
 
+            if (opts.Send)
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                SendToPhoneForm form = new SendToPhoneForm();
+                form.Preload(opts.SendPaths);
+                Application.Run(form);
+                return;
+            }
+
             bool createdNew;
             using (Mutex mutex = new Mutex(true, @"Local\VvFileReceiver-" + opts.Port, out createdNew))
             {
@@ -288,6 +309,7 @@ namespace VvFileReceiver
     {
         private readonly Options _opts;
         private readonly NotifyIcon _tray;
+        private SendToPhoneForm _sendForm;
         private readonly SynchronizationContext _ui;
         private readonly TcpListener _listener;
         private Discovery _discovery;
@@ -346,6 +368,10 @@ namespace VvFileReceiver
             open.Click += delegate { OpenFolder(); };
             menu.Items.Add(open);
 
+            ToolStripMenuItem sendToPhone = new ToolStripMenuItem("发送到手机…");
+            sendToPhone.Click += delegate { ShowSendForm(); };
+            menu.Items.Add(sendToPhone);
+
             ToolStripMenuItem copy = new ToolStripMenuItem("复制本机地址（备用）");
             copy.Click += delegate
             {
@@ -403,6 +429,30 @@ namespace VvFileReceiver
             menu.Items.Add(exit);
 
             return menu;
+        }
+
+        /// <summary>「发送到手机」窗口：不退出程序就一直在，关掉再开还是同一个。
+        private void ShowSendForm()
+        {
+            try
+            {
+                if (_sendForm == null || _sendForm.IsDisposed)
+                {
+                    _sendForm = new SendToPhoneForm();
+                    _sendForm.Show();
+                }
+                else
+                {
+                    if (_sendForm.WindowState == FormWindowState.Minimized)
+                        _sendForm.WindowState = FormWindowState.Normal;
+                    _sendForm.Activate();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Write("打开发送窗口失败：" + ex.Message);
+                Notify("打不开发送窗口", ex.Message);
+            }
         }
 
         private void OpenFolder()
@@ -896,6 +946,7 @@ namespace VvFileReceiver
         }
     }
 }
+
 
 
 

@@ -21,6 +21,7 @@
     <!-- 发送到电脑：局域网发现与传输（UDP 广播 + HTTP） -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- 音频播放：前台服务 + 通知栏控制 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -99,6 +100,12 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
+
+        <!-- 电脑 → 手机：常驻接收服务（TCP + UDP 7718），文件落到 Download/VVFile -->
+        <service
+            android:name=".core.transfer.PcReceiveService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

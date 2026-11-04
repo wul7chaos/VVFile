@@ -1,4 +1,4 @@
-﻿# VVFile 接收器的编译脚本（用系统自带 csc.exe，不需要装 .NET SDK）
+# VVFile 接收器的编译脚本（用系统自带 csc.exe，不需要装 .NET SDK）
 #
 #   pwsh -File build.ps1                 编译到 pc\dist\VvFileReceiver.exe
 #   pwsh -File build.ps1 -Run            编译后立刻启动
@@ -45,7 +45,7 @@ if (-not (Test-Path $csc)) {
 if (-not (Test-Path $csc)) { throw '找不到 csc.exe（需要 .NET Framework 4.x）' }
 
 Write-Host "编译 -> $exe"
-$sources = Join-Path $scriptDir 'VvFileReceiver.cs'
+$sources = Get-ChildItem -Path $scriptDir -Filter *.cs | ForEach-Object { $_.FullName }
 & $csc /nologo /target:winexe /platform:anycpu /optimize+ /out:"$exe" `
     /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll $sources
 if ($LASTEXITCODE -ne 0) { throw "编译失败（exit $LASTEXITCODE）" }
