@@ -74,6 +74,15 @@ data class PaneState(
                     (extensions.isEmpty() || entry.extension in extensions)
             }
         }
+
+    /**
+     * 「全选」要选中的集合：**只包含过滤后看得见的条目**。
+     *
+     * 用 `entries` 会造成列表里只有几个文件、全选却把被过滤掉的也选中，
+     * 之后复制/删除跟着误伤；反选一直是按可见集合算的，这里统一到同一个口子。
+     */
+    val selectAllTargets: Set<String>
+        get() = visibleEntries.mapTo(LinkedHashSet()) { it.path }
 }
 
 data class BrowserUiState(

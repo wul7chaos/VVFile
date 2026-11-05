@@ -266,11 +266,18 @@ class BrowserViewModel : ViewModel() {
         updatePane(pane) { it.copy(selected = emptySet()) }
     }
 
+    /**
+     * 全选：只选**过滤后看得见**的条目。
+     *
+     * 以前用的是 `entries`（整个目录），过滤出几个文件后点全选会把被过滤掉的也一起选上，
+     * 列表里看不见、却被算进「已选 N 项」，后面的复制/删除跟着误伤。反选早就按
+     * [PaneState.visibleEntries] 算了，这里对齐。
+     */
     fun selectAll(pane: PaneId) {
         _state.update { s ->
             val target = pane
             val current = if (target == PaneId.LEFT) s.left else s.right
-            s.withOnlySelection(target, current.entries.map { it.path }.toSet())
+            s.withOnlySelection(target, current.selectAllTargets)
         }
     }
 
@@ -1176,4 +1183,6 @@ class BrowserViewModel : ViewModel() {
         const val SUGGESTION_LIMIT = 12
     }
 }
+
+
 
