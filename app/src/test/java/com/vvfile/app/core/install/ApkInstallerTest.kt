@@ -40,6 +40,66 @@ class ApkInstallerTest {
     )
 
     @Test
+    fun `共享存储里的包先复制到 data local tmp 再装`() = runBlocking {
+        val runner = FakeRunner { index ->
+            when (index) {
+                0 -> result("")                       // cp + chmod
+                1 -> result("Success")                // pm install
+                else -> result("")                    // rm -f
+            }
+        }
+        val outcome = ApkInstaller.installWithRoot("/storage/emulated/0/Download/Telegram/APEX.apk", runner)
+
+        assertTrue(outcome.success)
+        assertEquals(3, runner.commands.size)
+        assertTrue(runner.commands[0].startsWith("cp '/storage/emulated/0/Download/Telegram/APEX.apk' '/data/local/tmp/vvfile-install-"))
+        assertTrue(runner.commands[0].contains("chmod 644"))
+        assertTrue(runner.commands[1].startsWith("pm install -r '/data/local/tmp/vvfile-install-"))
+        assertTrue(runner.commands[2].startsWith("rm -f '/data/local/tmp/vvfile-install-"))
+        assertTrue(runner.rootFlags.all { it })
+    }
+
+    @Test
+    fun `data 分区里的包直接装不复制`() = runBlocking {
+        val runner = FakeRunner { result("Success") }
+        val outcome = ApkInstaller.installWithRoot("/data/local/tmp/ready.apk", runner)
+
+        assertTrue(outcome.success)
+        assertEquals(listOf("pm install -r '/data/local/tmp/ready.apk'"), runner.commands)
+    }
+
+    @Test
+    fun `复制失败就不去装，并说明原因`() = runBlocking {
+        val runner = FakeRunner { index ->
+            if (index == 0) result("", exitCode = 1, stderr = "cp: Permission denied") else result("Success")
+        }
+        val outcome = ApkInstaller.installWithRoot("/storage/emulated/0/a.apk", runner)
+
+        assertFalse(outcome.success)
+        assertTrue(outcome.message.contains("/data/local/tmp"))
+        assertEquals(1, runner.commands.size)
+    }
+
+    @Test
+    fun `直接装报 system server 读不了文件时，复制后重试一次`() = runBlocking {
+        val runner = FakeRunner { index ->
+            when (index) {
+                0 -> result("Error: Cannot open file: /data/app/x.apk", exitCode = 1)
+                1 -> result("")
+                2 -> result("Success")
+                else -> result("")
+            }
+        }
+        val outcome = ApkInstaller.installWithRoot("/data/app/x.apk", runner)
+
+        assertTrue(outcome.success)
+        assertEquals(4, runner.commands.size)
+        assertTrue(runner.commands[1].startsWith("cp "))
+        assertTrue(runner.commands[1].contains("/data/local/tmp/vvfile-install-"))
+        assertTrue(runner.commands[2].startsWith("pm install -r "))
+    }
+
+    @Test
     fun `只有 apk 扩展名算安装包`() {
         assertTrue(ApkInstaller.isApkFile("/sdcard/a.apk"))
         assertTrue(ApkInstaller.isApkFile("/sdcard/Base.APK"))
@@ -89,7 +149,7 @@ class ApkInstallerTest {
                 result("Success")
             }
         }
-        val outcome = ApkInstaller.installWithRoot("/sdcard/a.apk", runner = fake)
+        val outcome = ApkInstaller.installWithRoot("/data/local/tmp/a.apk", runner = fake)
 
         assertTrue(outcome.success)
         assertEquals(2, fake.commands.size)
@@ -105,3 +165,5 @@ class ApkInstallerTest {
         assertFalse(outcome.success)
     }
 }
+
+
