@@ -44,7 +44,7 @@ class ShellExecutor(
         timeoutMs: Long,
     ): ShellResult = withContext(Dispatchers.IO) {
         val argv = if (asRoot) {
-            arrayOf(suBinary(), "-c", namespacePrefix() + command)
+            arrayOf(suBinary(), "-c", rootCommand(command))
         } else {
             arrayOf(SH_BINARY, "-c", command)
         }
@@ -160,6 +160,24 @@ class ShellExecutor(
         fun namespacePrefix(): String =
             if (runCatching { File(NSENTER_BINARY).exists() }.getOrDefault(false)) NAMESPACE_PREFIX else ""
 
+
+        /**
+         * root 通道真正执行的命令串。
+         *
+         * 切命名空间时**必须再过一层 sh**：`nsenter` 是直接 exec 的，
+         * 命令里只要有 `cd … && …`、管道、重定向就会变成 `nsenter: exec cd: No such file or directory`。
+         * 所以整条命令用单引号包住交给命名空间里的 `/system/bin/sh -c`。
+         */
+        private fun rootCommand(command: String): String {
+            val prefix = namespacePrefix()
+            if (prefix.isEmpty()) return command
+            return prefix + SH_IN_NAMESPACE + " -c " + shellQuote(command)
+        }
+
+        /** 供测试直接拼命名空间命令，不用真的起进程。 */
+        fun wrapInNamespace(command: String): String = NAMESPACE_PREFIX + SH_IN_NAMESPACE + " -c " + shellQuote(command)
+
+        private const val SH_IN_NAMESPACE = "/system/bin/sh"
         private const val NSENTER_BINARY = "/system/bin/nsenter"
 
         /**
