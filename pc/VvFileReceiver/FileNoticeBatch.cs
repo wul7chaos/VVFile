@@ -22,6 +22,8 @@ namespace VvFileReceiver
         private const int MaxWaitMs = 3200;
         /// <summary>同一条通知之后至少隔这么久才再弹。</summary>
         private const int CooldownMs = 5000;
+        /// <summary>通知里那句提示：告诉用户点一下能直接跳到目录。</summary>
+        private const string HINT = "\r\n（点这条通知可直接打开所在目录）";
 
         private readonly Action<string, string> _show;
         private readonly Action<Action> _dispatch;
@@ -33,6 +35,7 @@ namespace VvFileReceiver
         private long _bytes;
         private DateTime _holdUntil = DateTime.MinValue;
         private DateTime _firstAt = DateTime.MinValue;
+        private string _lastRelative = string.Empty;
 
         /// <param name="show">真正弹通知（在 UI 线程调用）</param>
         /// <param name="dispatch">把回调丢到 UI 线程（接收线程不是 UI 线程）</param>
@@ -46,6 +49,12 @@ namespace VvFileReceiver
             _timer.Tick += delegate { Flush(); };
         }
 
+        /// <summary>最近一个收到的文件（相对接收目录）；点通知时用它定位。</summary>
+        public string LastRelativePath
+        {
+            get { lock (_gate) { return _lastRelative; } }
+        }
+
         /// <summary>收到一个文件；可从任意线程调用。</summary>
         public void Add(string relativePath, long bytes)
         {
@@ -55,6 +64,7 @@ namespace VvFileReceiver
                 _count++;
                 _bytes += bytes;
                 if (_names.Count < 200) _names.Add(relativePath ?? string.Empty);
+                if (!string.IsNullOrEmpty(relativePath)) _lastRelative = relativePath;
             }
             _dispatch(Arm);
         }
@@ -100,7 +110,7 @@ namespace VvFileReceiver
             if (count == 1)
             {
                 title = "收到 1 个文件";
-                text = (names.Count > 0 ? names[0] : "已保存") + "\r\n" + SizeText(bytes);
+                text = (names.Count > 0 ? names[0] : "已保存") + "\r\n" + SizeText(bytes) + HINT;
             }
             else
             {
@@ -108,7 +118,7 @@ namespace VvFileReceiver
                 StringBuilder builder = new StringBuilder();
                 builder.Append("共 ").Append(SizeText(bytes));
                 if (names.Count > 0) builder.Append("\r\n最后一个：").Append(names[names.Count - 1]);
-                text = builder.ToString();
+                text = builder.ToString() + HINT;
             }
 
             Log.Write("通知：" + title + " · " + (names.Count > 0 ? names[names.Count - 1] : "-"));
@@ -141,4 +151,5 @@ namespace VvFileReceiver
         }
     }
 }
+
 

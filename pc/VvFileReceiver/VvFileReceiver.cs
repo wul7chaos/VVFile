@@ -348,6 +348,8 @@ namespace VvFileReceiver
             // 双击托盘直接开「发送到手机」，这是最常用的入口
             _tray.DoubleClick += delegate { ShowSendForm(); };
             _tray.Visible = true;
+            // 点通知横幅：跳到接收目录并选中刚收到的文件
+            _tray.BalloonTipClicked += delegate { OpenReceivedFolder(); };
 
             Thread worker = new Thread(ServeLoop);
             worker.IsBackground = true;
@@ -440,17 +442,42 @@ namespace VvFileReceiver
             }
         }
 
-        private void OpenFolder()
+        /// <summary>
+        /// 打开接收目录；[selectPath] 给了具体文件就用 `/select,` 定位到它（资源管理器会打开父目录并选中）。
+        /// </summary>
+        private void OpenFolder(string selectPath = null)
         {
             try
             {
                 Directory.CreateDirectory(_opts.Dir);
+                if (!string.IsNullOrEmpty(selectPath) && File.Exists(selectPath))
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + selectPath + "\"");
+                    return;
+                }
                 System.Diagnostics.Process.Start("explorer.exe", "\"" + _opts.Dir + "\"");
             }
             catch (Exception ex)
             {
                 Log.Write("打开目录失败：" + ex.Message);
             }
+        }
+
+        /// <summary>通知被点击时：定位到最近收到的那个文件（没有就只打开目录）。</summary>
+        private void OpenReceivedFolder()
+        {
+            string relative = _fileNotices == null ? null : _fileNotices.LastRelativePath;
+            string full = null;
+            try
+            {
+                if (!string.IsNullOrEmpty(relative)) full = Path.Combine(_opts.Dir, relative);
+            }
+            catch
+            {
+                full = null;
+            }
+            Log.Write("点通知打开目录" + (string.IsNullOrEmpty(full) ? "" : "（定位 " + full + "）"));
+            OpenFolder(full);
         }
 
         private void Notify(string title, string text)
@@ -905,6 +932,7 @@ namespace VvFileReceiver
         }
     }
 }
+
 
 
 
