@@ -22,9 +22,6 @@ namespace VvFileReceiver
         private const int MaxWaitMs = 3200;
         /// <summary>同一条通知之后至少隔这么久才再弹。</summary>
         private const int CooldownMs = 5000;
-        /// <summary>通知里那句提示：告诉用户点一下能直接跳到目录。</summary>
-        private const string HINT = "\r\n（点这条通知可直接打开所在目录）";
-
         private readonly Action<string, string> _show;
         private readonly Action<Action> _dispatch;
         private readonly Timer _timer;
@@ -110,7 +107,7 @@ namespace VvFileReceiver
             if (count == 1)
             {
                 title = "收到 1 个文件";
-                text = (names.Count > 0 ? names[0] : "已保存") + "\r\n" + SizeText(bytes) + HINT;
+                text = (names.Count > 0 ? names[0] : "已保存") + "\r\n" + SizeText(bytes);
             }
             else
             {
@@ -118,7 +115,7 @@ namespace VvFileReceiver
                 StringBuilder builder = new StringBuilder();
                 builder.Append("共 ").Append(SizeText(bytes));
                 if (names.Count > 0) builder.Append("\r\n最后一个：").Append(names[names.Count - 1]);
-                text = builder.ToString() + HINT;
+                text = builder.ToString();
             }
 
             Log.Write("通知：" + title + " · " + (names.Count > 0 ? names[names.Count - 1] : "-"));
