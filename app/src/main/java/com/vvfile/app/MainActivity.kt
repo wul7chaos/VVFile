@@ -57,6 +57,7 @@ import com.vvfile.app.feature.onboarding.AgreementScreen
 import com.vvfile.app.feature.settings.SettingsScreen
 import com.vvfile.app.core.transfer.PcTarget
 import com.vvfile.app.feature.transfer.SendToPcDialog
+import com.vvfile.app.feature.terminal.TerminalLaunch
 import com.vvfile.app.feature.terminal.TerminalScreen
 import com.vvfile.app.ui.theme.AccentPresets
 import com.vvfile.app.ui.theme.VVFileTheme
@@ -278,6 +279,13 @@ class MainActivity : ComponentActivity() {
                         // 点压缩包直接进去看，而不是弹「选择打开方式」；判断统一在 openPath 里做
                         onOpenFile = { path -> openPath(path) },
                         onSendToPc = { paths -> sendPaths = paths.joinToString("\n") },
+                        onRunInTerminal = { command, cwd ->
+                            TerminalLaunch.request(command, cwd)
+                            editingPath = null
+                            showSettings = false
+                            showApps = false
+                            showTerminal = true
+                        },
                         onToolClick = { tool ->
                             when (tool) {
                                 "设置" -> showSettings = true
@@ -459,5 +467,6 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SEND_TO_PC_PATHS = "com.vvfile.app.extra.SEND_TO_PC_PATHS"
     }
 }
+
 
 

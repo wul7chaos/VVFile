@@ -47,6 +47,9 @@ object PtyShell {
     /** 启动脚本文件名，落在 `$HOME` 下，通过 `ENV` 交给交互式 mksh source。 */
     const val RC_NAME = ".vvfile_env"
 
+    /** 「开机执行一条命令」用的临时启动脚本前缀。 */
+    private const val RC_LAUNCH_PREFIX = ".vvfile_run_"
+
     /**
      * 清屏序列：光标归位 + 清可视区 + 清回滚（`3J` 是 xterm 扩展，Termux 的仿真器支持）。
      *
@@ -95,6 +98,40 @@ object PtyShell {
         }
         return file.absolutePath
     }
+
+    /**
+     * 写一份「带开机命令」的启动脚本，供 [spec] 的 `ENV` 用。
+     *
+     * 为什么不用「起好 shell 再往里打字」：PTY 要先有宽高才 `fork()`，打字时机全靠轮询碰运气，
+     * 命令还可能打在提示符出来之前。写进 `$ENV` 则是 shell 自己的第一件事，顺序是确定的：
+     * 先执行这段 `cd && 命令`，命令结束后自然落回交互提示符，之后照常输入、`Ctrl+C`。
+     *
+     * 文件名带时间戳，跑过的旧文件在 [cleanupLaunchRc] 里清掉，避免下次开机又执行一遍。
+     */
+    fun writeLaunchRc(dir: File, workDir: String, command: String): String? {
+        runCatching { dir.mkdirs() }
+        cleanupLaunchRc(dir)
+        val file = File(dir, RC_LAUNCH_PREFIX + System.currentTimeMillis())
+        val body = buildString {
+            append(RC)
+            append('\n')
+            if (workDir.isNotBlank() && workDir != "/") {
+                append("cd ").append(shellQuote(workDir)).append(" && ")
+            }
+            append(command).append('\n')
+        }
+        return runCatching { file.writeText(body); file.absolutePath }.getOrNull()
+    }
+
+    /** 清掉历史启动脚本（含上一轮中断遗留的）。 */
+    fun cleanupLaunchRc(dir: File) {
+        runCatching {
+            dir.listFiles { f -> f.name.startsWith(RC_LAUNCH_PREFIX) }?.forEach { it.delete() }
+        }
+    }
+
+    /** 单引号包裹，供拼进 mksh 脚本。 */
+    private fun shellQuote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
 
     /**
      * 构造普通用户会话。
@@ -150,3 +187,4 @@ internal fun rootFromPromptLine(line: String): Boolean? {
 
 /** `:/some/path #` / `:/some/path $`，允许行尾有空白。 */
 private val PROMPT_TAIL = Regex("^:.*\\s([#$])\\s*$")
+

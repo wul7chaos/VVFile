@@ -27,6 +27,13 @@ data class ArchiveView(
     val unlocked: Boolean = false,
     /** 正在解出的条目名；非空时列表顶部显示细进度线。 */
     val extracting: String? = null,
+    /**
+     * 已勾选的条目名（包内相对路径）。
+     *
+     * 只在「挑几条解出来」时有值：非空就表示这个窗格处于勾选态，底部出现「解压选中」。
+     * 和目录的 `PaneState.selected` 分开存——两者语义不同，混用会让「全选」选错东西。
+     */
+    val marked: Set<String> = emptySet(),
 ) {
     /** 当前这一层的条目（目录在前，文件在后）。 */
     val visibleEntries: List<ArchiveEntryInfo>
@@ -134,6 +141,8 @@ data class ConflictPrompt(
 data class ZipPasswordPrompt(
     val zipPath: String,
     val targetDir: String,
+    /** 只解这几条（包内相对路径）；null 表示整包。密码回来之后要沿用同样的选择。 */
+    val entries: List<String>? = null,
     val wrong: Boolean = false,
 )
 
@@ -163,3 +172,5 @@ sealed interface UiMessage {
 
     data class Simple(val textRes: Int) : UiMessage
 }
+
+

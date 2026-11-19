@@ -85,8 +85,11 @@ class LocalFileOperator(
         targetDir: String,
         policy: ConflictPolicy,
         password: String?,
+        entries: List<String>?,
     ): Flow<OperationEvent> = flow {
-        val result = runUnzip(zipPath, targetDir, policy, password) { emit(OperationEvent.Progress(it)) }
+        val result = runUnzip(zipPath, targetDir, policy, password, entries) {
+            emit(OperationEvent.Progress(it))
+        }
         emit(OperationEvent.Finished(result))
     }.flowOn(io)
 
@@ -550,17 +553,22 @@ class LocalFileOperator(
         targetDir: String,
         policy: ConflictPolicy,
         password: String?,
+        entries: List<String>? = null,
         report: suspend (OperationProgress) -> Unit,
     ): OperationResult {
         val archive = Paths.get(zipPath).toFile()
         val root = Paths.get(targetDir)
+        val wanted = entries?.let { ExpandArchiveSelection.expand(it) }
         report(OperationProgress(phase = OperationPhase.PREPARING, currentName = "正在统计…"))
         return try {
             // 认容器只信字节：自解压 .exe 的扩展名说明不了任何问题
             when (ArchiveSignature.of(archive)) {
-                ArchiveSignature.Container.SEVEN_Z -> extractSevenZip(archive, root, policy, password, report)
-                ArchiveSignature.Container.RAR -> extractRar(archive, root, policy, password, report)
-                ArchiveSignature.Container.ZIP, null -> extractZip(archive, root, policy, password, report)
+                ArchiveSignature.Container.SEVEN_Z ->
+                    extractSevenZip(archive, root, policy, password, wanted, report)
+                ArchiveSignature.Container.RAR ->
+                    extractRar(archive, root, policy, password, wanted, report)
+                ArchiveSignature.Container.ZIP, null ->
+                    extractZip(archive, root, policy, password, wanted, report)
             }
         } catch (wrong: ArchivePasswordException) {
             OperationResult(failures = listOf(OperationFailure(zipPath, wrong.message ?: "密码不正确")))
@@ -579,6 +587,7 @@ class LocalFileOperator(
         root: Path,
         policy: ConflictPolicy,
         password: String?,
+        wanted: List<String>?,
         report: suspend (OperationProgress) -> Unit,
     ): OperationResult {
         val succeeded = mutableListOf<String>()
@@ -589,14 +598,15 @@ class LocalFileOperator(
             // 中央目录读不出来（Zip64 / 非标准包）：回到 java.util.zip
             return extractZipWithZipFile(archive, root, policy, report)
         }
+        val picked = ExpandArchiveSelection.filter(central, wanted) { it.name }
         val tracker = ProgressTracker(
-            totalBytes = central.sumOf { if (it.isDirectory) 0L else it.size },
-            totalItems = central.size,
+            totalBytes = picked.sumOf { if (it.isDirectory) 0L else it.size },
+            totalItems = picked.size,
             report = report,
         )
         Files.createDirectories(root)
         try {
-            for (entry in central) {
+            for (entry in picked) {
                 coroutineContext.ensureActive()
                 extractEntry(
                     root = root,
@@ -658,13 +668,14 @@ class LocalFileOperator(
         root: Path,
         policy: ConflictPolicy,
         password: String?,
+        wanted: List<String>?,
         report: suspend (OperationProgress) -> Unit,
     ): OperationResult {
         val succeeded = mutableListOf<String>()
         val skipped = mutableListOf<String>()
         val failures = mutableListOf<OperationFailure>()
         SevenZipArchive.open(archive, password).use { session ->
-            val entries = session.entries
+            val entries = ExpandArchiveSelection.filter(session.entries, wanted) { it.name }
             val tracker = ProgressTracker(
                 totalBytes = entries.sumOf { if (it.isDirectory) 0L else it.size },
                 totalItems = entries.size,
@@ -704,13 +715,14 @@ class LocalFileOperator(
         root: Path,
         policy: ConflictPolicy,
         password: String?,
+        wanted: List<String>?,
         report: suspend (OperationProgress) -> Unit,
     ): OperationResult {
         val succeeded = mutableListOf<String>()
         val skipped = mutableListOf<String>()
         val failures = mutableListOf<OperationFailure>()
         RarArchive.open(archive, password).use { session ->
-            val entries = session.entries
+            val entries = ExpandArchiveSelection.filter(session.entries, wanted) { it.name }
             val tracker = ProgressTracker(
                 totalBytes = entries.sumOf { if (it.isDirectory) 0L else it.size },
                 totalItems = entries.size,
@@ -968,3 +980,5 @@ class LocalFileOperator(
         const val EMIT_INTERVAL_MS = 80L
     }
 }
+
+

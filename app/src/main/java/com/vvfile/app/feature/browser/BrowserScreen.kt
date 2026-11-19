@@ -124,6 +124,7 @@ import com.vvfile.app.core.script.ScriptRunResult
 import com.vvfile.app.core.script.ScriptRunner
 import com.vvfile.app.core.shell.RootAccess
 import com.vvfile.app.core.shell.RootManager
+import com.vvfile.app.core.shell.ShellExecutor
 import com.vvfile.app.core.share.FileOpener
 import com.vvfile.app.core.share.FileSharer
 import com.vvfile.app.data.file.AggregateProperties
@@ -157,6 +158,11 @@ fun BrowserScreen(
     /** 外部「定位所在目录」请求定位的文件；消费后回调 [onLocateHandled]。 */
     locateFile: String? = null,
     onLocateHandled: (() -> Unit)? = null,
+    /**
+     * 在终端里执行一条命令。给了就走终端（实时输出、可交互、能 Ctrl+C）；
+     * 没给（比如预览/测试）退回弹窗看结果。
+     */
+    onRunInTerminal: ((command: String, cwd: String) -> Unit)? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -168,7 +174,8 @@ fun BrowserScreen(
     var properties by remember { mutableStateOf<FileProperties?>(null) }
     var showFilter by remember { mutableStateOf(false) }
     var showPathInput by remember { mutableStateOf(false) }
-    var showUnzipTo by remember { mutableStateOf(false) }
+    /** 非 null 时弹解压选项对话框；值是被解压的压缩包路径。 */
+    var unzipOptions by remember { mutableStateOf<String?>(null) }
     var aggregate by remember { mutableStateOf<AggregateProperties?>(null) }
     var chmodRequest by remember { mutableStateOf<ChmodRequest?>(null) }
 
@@ -519,10 +526,15 @@ fun BrowserScreen(
                     },
                     onPullRefresh = { viewModel.refresh(PaneId.LEFT) },
                     onArchiveEntry = { entry ->
-                        viewModel.archiveTap(PaneId.LEFT, entry, archiveCacheDir) { ready ->
-                            onOpenFile?.invoke(ready)
+                        viewModel.archiveEntryClick(PaneId.LEFT, entry) {
+                            viewModel.archiveTap(PaneId.LEFT, entry, archiveCacheDir) { ready ->
+                                onOpenFile?.invoke(ready)
+                            }
                         }
                     },
+                    onArchiveLongPress = { entry -> viewModel.archiveSelect(PaneId.LEFT, entry) },
+                    onArchiveUnzipMarked = { unzipOptions = state.left.archive?.path },
+                    onArchiveClearMarked = { viewModel.clearMarked(PaneId.LEFT) },
                     onArchiveRetry = { viewModel.reloadArchive(PaneId.LEFT) },
                     modifier = Modifier.weight(1f),
                 )
@@ -553,10 +565,15 @@ fun BrowserScreen(
                         },
                         onPullRefresh = { viewModel.refresh(PaneId.RIGHT) },
                         onArchiveEntry = { entry ->
-                            viewModel.archiveTap(PaneId.RIGHT, entry, archiveCacheDir) { ready ->
-                                onOpenFile?.invoke(ready)
+                            viewModel.archiveEntryClick(PaneId.RIGHT, entry) {
+                                viewModel.archiveTap(PaneId.RIGHT, entry, archiveCacheDir) { ready ->
+                                    onOpenFile?.invoke(ready)
+                                }
                             }
                         },
+                        onArchiveLongPress = { entry -> viewModel.archiveSelect(PaneId.RIGHT, entry) },
+                        onArchiveUnzipMarked = { unzipOptions = state.right.archive?.path },
+                        onArchiveClearMarked = { viewModel.clearMarked(PaneId.RIGHT) },
                         onArchiveRetry = { viewModel.reloadArchive(PaneId.RIGHT) },
                         modifier = Modifier.weight(1f),
                     )
@@ -586,8 +603,8 @@ fun BrowserScreen(
                         )
                     },
                     canUnzip = canUnzip,
-                    onUnzip = { viewModel.unzipSelection() },
-                    onUnzipTo = { showUnzipTo = true },
+                    onUnzip = { unzipOptions = singleSelected?.path },
+                    onUnzipTo = { unzipOptions = singleSelected?.path },
                     onShare = {
                         FileSharer.share(context, activePane.selected.toList())
                     },
@@ -677,6 +694,15 @@ fun BrowserScreen(
                 scriptTarget = null
                 if (scriptEnv == ScriptEnv.ROOT && !RootManager.isAvailable()) {
                     Toast.makeText(context, R.string.terminal_root_unavailable, Toast.LENGTH_SHORT).show()
+                } else if (onRunInTerminal != null) {
+                    // 交给终端：输出实时刷，脚本里有 read 也能输入
+                    val command = ScriptRunner.buildCommand(entry.path, scriptPermission)
+                    val line = if (scriptEnv == ScriptEnv.ROOT) {
+                        "su -c " + ShellExecutor.shellQuote(command)
+                    } else {
+                        command
+                    }
+                    onRunInTerminal(line, entry.path.substringBeforeLast('/', ""))
                 } else {
                     val target = entry
                     val env = scriptEnv
@@ -745,8 +771,8 @@ fun BrowserScreen(
                 val base = entry.name.substringBeforeLast('.').ifBlank { entry.name }
                 nameDialog = NameDialogState(NameDialogMode.ZIP, "$base.zip")
             },
-            onUnzip = viewModel::unzipSelection,
-            onUnzipTo = { showUnzipTo = true },
+            onUnzip = { unzipOptions = entry.path },
+            onUnzipTo = { unzipOptions = entry.path },
             onProperties = { openProperties(targets) },
             onShare = { FileSharer.share(context, targets.map { it.path }) },
             onOpenWith = { openWithTarget = entry },
@@ -834,14 +860,20 @@ fun BrowserScreen(
         )
     }
 
-    if (showUnzipTo) {
-        UnzipToDialog(
-            defaultPath = activePane.path,
-            onConfirm = { path ->
-                showUnzipTo = false
-                viewModel.unzipSelection(path)
+    // 解压选项：解到哪、要不要单独建同名文件夹、只解当前这一层还是整包（对齐 MT）
+    unzipOptions?.let { archivePath ->
+        UnzipOptionsDialog(
+            archiveName = File(archivePath).name,
+            currentDir = activePane.path,
+            innerDir = activePane.archive?.currentDir.orEmpty(),
+            marked = activePane.archive?.marked?.toList().orEmpty(),
+            onConfirm = { targetDir, entries ->
+                unzipOptions = null
+                // 「同名文件夹」由对话框算好目标路径；目录由解压流程自己建（root 分区上
+                // 应用权限建不了，必须让 su 那条通道去 mkdir -p）
+                viewModel.unzipSelection(targetDir, entries)
             },
-            onDismiss = { showUnzipTo = false },
+            onDismiss = { unzipOptions = null },
         )
     }
 
@@ -1583,40 +1615,6 @@ private data class NameDialogState(
 )
 
 @Composable
-private fun UnzipToDialog(
-    defaultPath: String,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var path by remember { mutableStateOf(defaultPath) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.ui_unzip_to_title)) },
-        text = {
-            OutlinedTextField(
-                value = path,
-                onValueChange = { path = it },
-                label = { Text(stringResource(R.string.ui_unzip_to_path)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { path.trim().takeIf { it.isNotEmpty() }?.let(onConfirm) },
-            ) {
-                Text(stringResource(R.string.ui_unzip_to_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.ui_filter_cancel))
-            }
-        },
-    )
-}
-
-@Composable
 private fun FilterDialog(
     initialQuery: String,
     initialExtensions: String,
@@ -2042,6 +2040,12 @@ private fun TrackPaneScroll(
         listState.scrollToItem(index, offset)
     }
 }
+
+
+
+
+
+
 
 
 

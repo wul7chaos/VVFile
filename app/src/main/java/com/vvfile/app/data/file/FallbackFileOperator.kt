@@ -82,10 +82,13 @@ class FallbackFileOperator(
         targetDir: String,
         policy: ConflictPolicy,
         password: String?,
+        entries: List<String>?,
     ): Flow<OperationEvent> = when {
-        useRoot(zipPath, targetDir) -> root.unzip(zipPath, targetDir, policy, password)
+        // 包在 root 分区读不到、或目标目录是 root 分区，都走 root 通道：
+        // 它内部先用应用权限解开，再用 su 把结果搬进目标目录
+        useRoot(zipPath, targetDir) -> root.unzip(zipPath, targetDir, policy, password, entries)
         needsRootButUnavailable(zipPath, targetDir) -> rootRequiredFlow(listOf(zipPath))
-        else -> local.unzip(zipPath, targetDir, policy, password)
+        else -> local.unzip(zipPath, targetDir, policy, password, entries)
     }
 
     override suspend fun rename(path: String, newName: String): OperationResult = when {
@@ -125,9 +128,14 @@ class FallbackFileOperator(
         zipPath: String,
         targetDir: String,
         password: String?,
-    ): List<ConflictInfo> = local.findZipConflicts(zipPath, targetDir, password)
+    ): List<ConflictInfo> = when {
+        // root 目标目录：应用权限看不到里面有什么，交给 root 通道自己按冲突策略处理
+        useRoot(targetDir) -> emptyList()
+        else -> local.findZipConflicts(zipPath, targetDir, password)
+    }
 
     private companion object {
         const val ROOT_REQUIRED = "这个目录需要 ROOT 权限才能修改（侧栏 → 设置 → root 请求策略）"
     }
 }
+

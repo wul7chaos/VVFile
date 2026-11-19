@@ -80,10 +80,15 @@ object ServiceLocator {
         if (!::fileOperator.isInitialized) {
             fileOperator = FallbackFileOperator(
                 local = LocalFileOperator(),
-                root = ShellFileOperator(),
+                // root 通道自己不带解码器：解压时它借 local 解开，再用 su 把结果搬进目标目录
+                root = ShellFileOperator(
+                    local = LocalFileOperator(),
+                    cacheDir = context.cacheDir,
+                ),
                 rootAvailable = RootAccess::allowed,
             )
         }
     }
 }
+
 

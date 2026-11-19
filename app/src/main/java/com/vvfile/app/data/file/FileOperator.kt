@@ -32,14 +32,18 @@ interface FileOperator {
     ): Flow<OperationEvent>
 
     /**
-     * 解压 ZIP / 7z 到目录。[password] 只对加密包有意义；
+     * 解压 ZIP / 7z / RAR 到目录。[password] 只对加密包有意义；
      * 密码错会以失败项的形式返回「密码不正确」，不会静默产出半截文件。
+     *
+     * [entries] 为 null 表示整包解压；给了列表就只解这些条目——名字是包内相对路径，
+     * 目录条目按前缀匹配（`a/b` 会把 `a/b/...` 一起带出来），对齐 MT 的「解压选中」。
      */
     fun unzip(
         zipPath: String,
         targetDir: String,
         policy: ConflictPolicy = ConflictPolicy.REPLACE,
         password: String? = null,
+        entries: List<String>? = null,
     ): Flow<OperationEvent>
 
     suspend fun rename(path: String, newName: String): OperationResult

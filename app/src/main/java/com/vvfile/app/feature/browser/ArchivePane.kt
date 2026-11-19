@@ -56,6 +56,11 @@ fun ArchivePaneView(
     onActivate: () -> Unit,
     onEntryClick: (ArchiveEntryInfo) -> Unit,
     onRetry: () -> Unit,
+    /** 长按条目：进入勾选态，挑几条解出来。 */
+    onEntryLongClick: (ArchiveEntryInfo) -> Unit = {},
+    /** 勾选态下的「解压选中」/「取消勾选」。 */
+    onUnzipMarked: () -> Unit = {},
+    onClearMarked: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -94,6 +99,7 @@ fun ArchivePaneView(
                     append("${visible.count { it.isDirectory }} 个文件夹")
                     append(" · ${visible.count { !it.isDirectory }} 个文件")
                     when {
+                        archive.marked.isNotEmpty() -> append(" · 已选 ${archive.marked.size} 条")
                         archive.extracting != null -> append(" · 正在解开")
                         archive.unlocked -> append(" · 已解锁")
                         encryptedCount > 0 -> append(" · 含加密条目")
@@ -131,11 +137,12 @@ fun ArchivePaneView(
                                 size = entry.size,
                                 lastModified = entry.modifiedAt,
                             ),
-                            isSelected = false,
+                            isSelected = entry.name in archive.marked,
                             showDetails = showDetails,
                             // 包内条目还没落盘，没有可解码的源文件，别去试缩略图
                             showThumbnail = false,
                             onClick = { onEntryClick(entry) },
+                            onLongClick = { onEntryLongClick(entry) },
                         )
                     }
                 }
@@ -149,6 +156,33 @@ fun ArchivePaneView(
                     color = accent,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
+            }
+        }
+
+        // 勾选态：只留两个动作。勾选的语义就是「挑几条解出来」，
+        // 复制/删除这些在包里没有意义，多放了只会误导。
+        if (archive.marked.isNotEmpty()) {
+            // 窗格只有半屏宽，文案必须短：长标签会折成两行把列表顶下去
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "已选 ${archive.marked.size}",
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onClearMarked, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Text("取消", fontSize = 12.sp, maxLines = 1)
+                }
+                TextButton(onClick = onUnzipMarked, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Text("解压", fontSize = 12.sp, maxLines = 1)
+                }
             }
         }
     }
@@ -237,3 +271,6 @@ private fun ArchiveErrorState(message: String, onRetry: () -> Unit) {
         TextButton(onClick = onRetry) { Text("重试", fontSize = 12.sp) }
     }
 }
+
+
+

@@ -44,6 +44,7 @@ class FallbackFileOperatorTest {
             targetDir: String,
             policy: ConflictPolicy,
             password: String?,
+            entries: List<String>?,
         ) = flowOf("unzip")
 
         override suspend fun rename(path: String, newName: String): OperationResult {

@@ -17,6 +17,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import java.io.File
 import kotlinx.coroutines.withContext
 
 /**
@@ -29,6 +30,10 @@ class ShellFileOperator(
     private val runner: CommandRunner = ShellExecutor(),
     private val asRoot: Boolean = true,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** 解压解码器：应用自己权限的实现，root 只管最后的搬运。 */
+    private val local: FileOperator? = null,
+    /** 落地缓存目录（app cache）；为 null 时 root 解压直接报不可用。 */
+    private val cacheDir: File? = null,
 ) : FileOperator {
 
     override fun copy(
@@ -75,12 +80,107 @@ class ShellFileOperator(
     ): Flow<OperationEvent> =
         unsupportedFlow(targetZip, "root 分区暂不支持压缩")
 
+    /**
+     * root 目录解压。
+     *
+     * 解压本身仍用应用自己的权限跑（[local]），只有「落地」这一步走 `su`：
+     * 1. root-only 的包先 `cp` 到应用缓存，否则 [local] 打不开它；
+     * 2. 解到缓存里的临时目录；
+     * 3. 每个顶层条目 `cp -a` 进目标目录，冲突策略与 [transferFlow] 一致。
+     *
+     * 只支持 ZIP：7z/RAR 的解码器同样只能读应用有权限的路径，而设备上没有 7z/unrar
+     * 命令行工具可借，硬做出来会让「能解」和「解不了」在不同包上随机表现。
+     */
     override fun unzip(
         zipPath: String,
         targetDir: String,
         policy: ConflictPolicy,
         password: String?,
-    ): Flow<OperationEvent> = unsupportedFlow(zipPath, "root 分区暂不支持解压")
+        entries: List<String>?,
+    ): Flow<OperationEvent> = flow {
+        val decoder = local
+        if (decoder == null || cacheDir == null) {
+            emit(OperationEvent.Progress(OperationProgress(phase = OperationPhase.PREPARING)))
+            emit(
+                OperationEvent.Finished(
+                    OperationResult(failures = listOf(OperationFailure(zipPath, ROOT_UNZIP_DISABLED))),
+                ),
+            )
+            return@flow
+        }
+        emit(OperationEvent.Progress(OperationProgress(phase = OperationPhase.PREPARING, currentName = "正在读取压缩包…")))
+        val source = stageArchive(zipPath, cacheDir)
+        if (source == null) {
+            emit(
+                OperationEvent.Finished(
+                    OperationResult(failures = listOf(OperationFailure(zipPath, "无法读取压缩包"))),
+                ),
+            )
+            return@flow
+        }
+        val work = File(cacheDir, "unzip-work-${System.currentTimeMillis()}")
+        runCatching { work.mkdirs() }
+        try {
+            var decodeFailure: String? = null
+            decoder.unzip(source.absolutePath, work.absolutePath, ConflictPolicy.REPLACE, password, entries)
+                .collect { event ->
+                    when (event) {
+                        is OperationEvent.Progress -> emit(OperationEvent.Progress(event.progress))
+                        is OperationEvent.Finished -> {
+                            decodeFailure = event.result.failures.firstOrNull()?.reason
+                        }
+                    }
+                }
+            if (decodeFailure != null && work.listFiles().isNullOrEmpty()) {
+                emit(
+                    OperationEvent.Finished(
+                        OperationResult(failures = listOf(OperationFailure(zipPath, decodeFailure!!))),
+                    ),
+                )
+                return@flow
+            }
+            // 「解压到同名文件夹」时目标目录还不存在，而 cp 不会自己建它
+            run("mkdir -p ${quote(targetDir)}", TIMEOUT_MS)
+            transferFlow(work.listFiles().orEmpty().map { it.absolutePath }, targetDir, policy, move = false)
+                .collect { event -> emit(event) }
+            // cp -a 会把应用自己的 uid、600 权限与 caches 组的 setgid 位一起带过去：落在
+            // /data 这类目录里之后除了本应用谁也读不了。系统分区里统一改成 root 所有、
+            // 目录 755 / 文件 644，和手动写进去的文件一致。
+            if (RootPaths.isRootOnly(targetDir)) {
+                run(
+                    "chown -R 0:0 ${quote(targetDir)} && " +
+                        "find ${quote(targetDir)} -type d -exec chmod 755 {} + && " +
+                        "find ${quote(targetDir)} -type f -exec chmod 644 {} +",
+                    TIMEOUT_MS,
+                )
+            }
+        } finally {
+            runCatching { work.deleteRecursively() }
+            // 只清我们自己落地的副本，别把用户原有的包删了
+            if (source.parentFile?.name == STAGE_DIR) {
+                runCatching { source.parentFile?.deleteRecursively() }
+            }
+        }
+    }.flowOn(io)
+
+    /**
+     * 把包搬到应用自己读得到的地方。
+     *
+     * 已经是可读路径就原样返回（调用方据此判断别删原文件）；只有 root 读得到的包复制一份
+     * 到缓存目录下的 [STAGE_DIR]。返回 null 表示复制失败。
+     */
+    private suspend fun stageArchive(zipPath: String, cache: File): File? = withContext(io) {
+        val direct = File(zipPath)
+        if (direct.canRead() && direct.isFile) return@withContext direct
+        val dir = File(cache, STAGE_DIR).apply { runCatching { mkdirs() } }
+        val temp = File(dir, "src-${System.currentTimeMillis()}.zip")
+        val copied = run("cp -a ${quote(zipPath)} ${quote(temp.absolutePath)}", TIMEOUT_MS)
+        if (!copied.isSuccess || !temp.isFile || temp.length() == 0L) {
+            runCatching { temp.delete() }
+            return@withContext null
+        }
+        temp
+    }
 
     override suspend fun rename(path: String, newName: String): OperationResult =
         withContext(io) {
@@ -260,5 +360,9 @@ class ShellFileOperator(
 
     companion object {
         private const val TIMEOUT_MS = 10 * 60 * 1000L
+        private const val STAGE_DIR = "unzip-stage"
+        private const val ROOT_UNZIP_DISABLED = "root 解压需要应用缓存目录与本地解码器"
     }
 }
+
+

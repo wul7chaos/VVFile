@@ -424,25 +424,41 @@ class BrowserViewModel : ViewModel() {
         startFlow(OperationKind.ZIP) { operator.zip(sources, targetZip, level) }
     }
 
-    fun unzipSelection(targetDir: String? = null) {
+    /**
+     * 解压当前选中的压缩包。
+     *
+     * [targetDir] 是目标目录（默认当前窗格）；[entries] 非空时只解这几条（包内相对路径），
+     * 对齐 MT 的「解压选中条目」。两者都会一路带到 operator，密码回来之后同样沿用。
+     */
+    fun unzipSelection(targetDir: String? = null, entries: List<String>? = null) {
         if (isBusy()) return notifyBusy()
         val pane = activePaneState()
-        val archive = selectedEntries(pane).singleOrNull()
+        // 两种入口：在文件列表里选中一个压缩包，或者这个窗格本来就展开着那个压缩包
+        // （勾选条目解压时属于后者，pane.selected 是空的）
+        val archivePath = selectedEntries(pane).singleOrNull()
             ?.takeIf { !it.isDirectory && ArchiveFormats.canExtract(File(it.path)) }
+            ?.path
+            ?: pane.archive?.path?.takeIf { ArchiveFormats.canExtract(File(it)) }
             ?: return postMessage(UiMessage.Simple(R.string.ui_ops_unzip_requires_zip))
-        val target = targetDir?.trim()?.takeIf { it.isNotEmpty() } ?: pane.path
+        val wanted = entries?.takeIf { it.isNotEmpty() }
+        // 窗格里展开压缩包时它自己不是目录条目，落点得用压缩包所在的目录
+        val target = targetDir?.trim()?.takeIf { it.isNotEmpty() }
+            ?: pane.archive?.path?.substringBeforeLast('/', "")?.takeIf { it.isNotEmpty() }
+            ?: pane.path
         if (target.isEmpty()) return postMessage(UiMessage.Simple(R.string.ui_ops_target_invalid))
         viewModelScope.launch {
             // 加密包先要密码：ZIP 看中央目录标志位，7z 连数据也要真读一下才知道
             val encrypted = withContext(Dispatchers.IO) {
-                runCatching { ArchiveEncryption.needsPassword(archive.path) }.getOrDefault(false)
+                runCatching { ArchiveEncryption.needsPassword(archivePath) }.getOrDefault(false)
             }
-            val cached = ArchivePasswords.get(archive.path)
+            val cached = ArchivePasswords.get(archivePath)
             if (encrypted && cached == null) {
-                _state.update { it.copy(zipPasswordPrompt = ZipPasswordPrompt(archive.path, target)) }
+                _state.update {
+                    it.copy(zipPasswordPrompt = ZipPasswordPrompt(archivePath, target, wanted))
+                }
                 return@launch
             }
-            proceedUnzip(archive.path, target, cached)
+            proceedUnzip(archivePath, target, cached, wanted)
         }
     }
 
@@ -461,7 +477,7 @@ class BrowserViewModel : ViewModel() {
                 return@launch
             }
             ArchivePasswords.remember(prompt.zipPath, password)
-            proceedUnzip(prompt.zipPath, prompt.targetDir, password)
+            proceedUnzip(prompt.zipPath, prompt.targetDir, password, prompt.entries)
         }
     }
 
@@ -494,6 +510,41 @@ class BrowserViewModel : ViewModel() {
         archiveJobs[pane]?.cancel()
         clearArchiveExtracting(pane)
         updatePane(pane) { it.copy(archive = null) }
+    }
+
+    /**
+     * 勾选 / 取消勾选一条包内条目。
+     *
+     * 点目录条目不进下一层、而是勾上：勾选态下用户是在挑「要解出来的东西」，
+     * 这时候跳目录只会让人丢选择。退出勾选态（[clearMarked]）之后再点才是进目录。
+     */
+    fun archiveSelect(pane: PaneId, entry: ArchiveEntryInfo) {
+        updatePane(pane) { current ->
+            val view = current.archive ?: return@updatePane current
+            val marked = if (entry.name in view.marked) {
+                view.marked - entry.name
+            } else {
+                view.marked + entry.name
+            }
+            current.copy(archive = view.copy(marked = marked))
+        }
+    }
+
+    fun clearMarked(pane: PaneId) {
+        updatePane(pane) { current ->
+            val view = current.archive ?: return@updatePane current
+            current.copy(archive = view.copy(marked = emptySet()))
+        }
+    }
+
+    /** 勾选态下点条目：只切换勾选，不跳目录也不解开。 */
+    fun archiveEntryClick(pane: PaneId, entry: ArchiveEntryInfo, onOpen: () -> Unit) {
+        val view = paneState(pane).archive ?: return
+        if (view.marked.isNotEmpty()) {
+            archiveSelect(pane, entry)
+            return
+        }
+        onOpen()
     }
 
     /** 重新读一遍包内条目（列表顶部刷新用）。 */
@@ -729,15 +780,20 @@ class BrowserViewModel : ViewModel() {
     }
 
     /** 冲突探测 + 起解压流程；[password] 一路带到 operator，加密条目靠它落地。 */
-    private suspend fun proceedUnzip(zipPath: String, target: String, password: String?) {
+    private suspend fun proceedUnzip(
+        zipPath: String,
+        target: String,
+        password: String?,
+        entries: List<String>? = null,
+    ) {
         try {
             val conflicts = operator.findZipConflicts(zipPath, target, password)
             if (conflicts.isEmpty()) {
                 startFlow(OperationKind.UNZIP) {
-                    operator.unzip(zipPath, target, ConflictPolicy.REPLACE, password)
+                    operator.unzip(zipPath, target, ConflictPolicy.REPLACE, password, entries)
                 }
             } else {
-                pendingUnzip = PendingUnzip(zipPath, target, password)
+                pendingUnzip = PendingUnzip(zipPath, target, password, entries)
                 _state.update {
                     it.copy(conflictPrompt = ConflictPrompt(OperationKind.UNZIP, conflicts.size))
                 }
@@ -760,7 +816,13 @@ class BrowserViewModel : ViewModel() {
             _state.update { it.copy(conflictPrompt = null) }
             if (policy == null) return
             startFlow(OperationKind.UNZIP) {
-                operator.unzip(pendingZip.zipPath, pendingZip.targetDir, policy, pendingZip.password)
+                operator.unzip(
+                    pendingZip.zipPath,
+                    pendingZip.targetDir,
+                    policy,
+                    pendingZip.password,
+                    pendingZip.entries,
+                )
             }
             return
         }
@@ -1028,6 +1090,7 @@ class BrowserViewModel : ViewModel() {
         val zipPath: String,
         val targetDir: String,
         val password: String? = null,
+        val entries: List<String>? = null,
     )
 
     /** 文件打开在 M2 接入；此处只暴露判断给 UI。 */
@@ -1183,6 +1246,8 @@ class BrowserViewModel : ViewModel() {
         const val SUGGESTION_LIMIT = 12
     }
 }
+
+
 
 
 

@@ -85,6 +85,11 @@ fun PaneContent(
     showDetails: Boolean = false,
     /** 这个窗格在浏览压缩包时点条目（目录进下一层，文件解出来再打开）。 */
     onArchiveEntry: (ArchiveEntryInfo) -> Unit = {},
+    /** 长按包内条目：进入勾选态。 */
+    onArchiveLongPress: (ArchiveEntryInfo) -> Unit = {},
+    /** 包里勾选态的「解压选中」/「取消勾选」。 */
+    onArchiveUnzipMarked: () -> Unit = {},
+    onArchiveClearMarked: () -> Unit = {},
     /** 压缩包读失败后的「重试」。 */
     onArchiveRetry: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -98,6 +103,9 @@ fun PaneContent(
             onActivate = onActivate,
             onEntryClick = onArchiveEntry,
             onRetry = onArchiveRetry,
+            onEntryLongClick = onArchiveLongPress,
+            onUnzipMarked = onArchiveUnzipMarked,
+            onClearMarked = onArchiveClearMarked,
             modifier = modifier,
         )
         return
@@ -456,5 +464,7 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
         }
     }
 }
+
+
 
 

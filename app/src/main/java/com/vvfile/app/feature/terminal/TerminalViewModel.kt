@@ -224,16 +224,28 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
         return created
     }
 
+    /**
+     * 构造会话参数。
+     *
+     * 「在终端里执行」走的是 `$ENV` 启动脚本（见 [PtyShell.writeLaunchRc]），不是往里打字：
+     * PTY 要先有宽高才 `fork()`，打字时机只能靠轮询赌，还可能打在提示符出来之前；写进启动
+     * 脚本则是 shell 自己第一个动作，顺序确定，跑完自然落回交互提示符，之后照常输入和 Ctrl+C。
+     * 请求只消费一次，后续 [restart] 拿到的是普通启动脚本，不会重跑旧命令。
+     */
     private fun buildSpec(): PtyShellSpec {
         val app = getApplication<Application>()
         val home = File(app.filesDir, "home").apply { runCatching { mkdirs() } }
         val external = File(EXTERNAL_ROOT)
-        val cwd = if (external.isDirectory) EXTERNAL_ROOT else home.absolutePath
+        val launch = TerminalLaunch.consume()
+        val workDir = launch?.cwd?.takeIf { it.isNotBlank() && File(it).isDirectory }
+        val cwd = workDir ?: if (external.isDirectory) EXTERNAL_ROOT else home.absolutePath
+        val rcFile = launch?.let { PtyShell.writeLaunchRc(home, workDir ?: "", it.command) }
+            ?: PtyShell.writeRc(home)
         return PtyShell.spec(
             home = home.absolutePath,
             tmpDir = app.cacheDir.absolutePath,
             cwd = cwd,
-            rcFile = PtyShell.writeRc(home),
+            rcFile = rcFile,
         )
     }
 
@@ -364,7 +376,7 @@ class TerminalViewModel(application: Application) : AndroidViewModel(application
 
         private val CLEAR_COMMAND = "clear\r".toByteArray(Charsets.US_ASCII)
 
-        /** `^U` 与 `clear\r` 之间留一点时间，让 shell 先把行清掉。 */
+        /** ^U 与 clear\r 之间留一点时间，让 shell 先把行清掉。 */
         private const val CLEAR_DELAY_MS = 60L
     }
 }
